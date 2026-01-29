@@ -139,60 +139,68 @@ class ArchitecturalLayoutEngine:
             building_bounds = self.boundary.bounds
             bldg_minx, bldg_miny, bldg_maxx, bldg_maxy = building_bounds
             
-            # 1. Main horizontal corridor (full width of building)
-            # This is the "spine" that connects all vertical branches
-            main_horizontal = box(
-                bldg_minx,
-                core_center_y - corridor_width / 2,
-                bldg_maxx,
-                core_center_y + corridor_width / 2
-            )
-            corridors.append(main_horizontal)
+            # Strategy: Minimal corridor network around core + side access
+            # Much less area than old approach
             
-            # 2. Vertical branches on both sides (for double_loaded layout)
-            # Left side branches
-            num_branches = 3  # Create 3 branches per side for better coverage
+            # 1. Ring corridor around core (double-loaded access)
+            ring_extension = corridor_width * 1.5  # Minimal extension
             
-            # Left branches
-            left_spacing = (core_center_y - bldg_miny) / (num_branches + 1)
-            for i in range(1, num_branches + 1):
-                y_pos = bldg_miny + i * left_spacing
-                left_branch = box(
-                    bldg_minx,
-                    y_pos - corridor_width / 2,
-                    core_minx,
-                    y_pos + corridor_width / 2
-                )
-                corridors.append(left_branch)
-            
-            # Right branches
-            right_spacing = (bldg_maxy - core_center_y) / (num_branches + 1)
-            for i in range(1, num_branches + 1):
-                y_pos = core_center_y + i * right_spacing
-                right_branch = box(
-                    core_maxx,
-                    y_pos - corridor_width / 2,
-                    bldg_maxx,
-                    y_pos + corridor_width / 2
-                )
-                corridors.append(right_branch)
-            
-            # 3. Vertical connections to core (ensure core accessibility)
-            north_connector = box(
-                core_center_x - corridor_width / 2,
+            # Top corridor (north of core)
+            top_corridor = box(
+                core_minx - ring_extension,
                 core_maxy,
-                core_center_x + corridor_width / 2,
-                core_center_y + corridor_width / 2
+                core_maxx + ring_extension,
+                core_maxy + corridor_width
             )
-            corridors.append(north_connector)
+            corridors.append(top_corridor)
             
-            south_connector = box(
-                core_center_x - corridor_width / 2,
-                core_center_y - corridor_width / 2,
-                core_center_x + corridor_width / 2,
+            # Bottom corridor (south of core)
+            bottom_corridor = box(
+                core_minx - ring_extension,
+                core_miny - corridor_width,
+                core_maxx + ring_extension,
                 core_miny
             )
-            corridors.append(south_connector)
+            corridors.append(bottom_corridor)
+            
+            # Left corridor (west of core)
+            left_corridor = box(
+                core_minx - corridor_width,
+                core_miny - ring_extension,
+                core_minx,
+                core_maxy + ring_extension
+            )
+            corridors.append(left_corridor)
+            
+            # Right corridor (east of core)
+            right_corridor = box(
+                core_maxx,
+                core_miny - ring_extension,
+                core_maxx + corridor_width,
+                core_maxy + ring_extension
+            )
+            corridors.append(right_corridor)
+            
+            # 2. Horizontal spine (connects to building edges)
+            # Only if building is large enough
+            if self.width > (core_maxx - core_minx) * 2:
+                # Left horizontal connector
+                left_spine = box(
+                    bldg_minx,
+                    core_center_y - corridor_width / 2,
+                    core_minx - corridor_width,
+                    core_center_y + corridor_width / 2
+                )
+                corridors.append(left_spine)
+                
+                # Right horizontal connector
+                right_spine = box(
+                    core_maxx + corridor_width,
+                    core_center_y - corridor_width / 2,
+                    bldg_maxx,
+                    core_center_y + corridor_width / 2
+                )
+                corridors.append(right_spine)
             
             # Clip all corridors to usable area and merge overlaps
             clipped_corridors = []
@@ -289,69 +297,111 @@ class ArchitecturalLayoutEngine:
             
             logger.info(f"Typical unit: {typical_width:.1f}m × {typical_depth:.1f}m = {avg_area:.1f}m²")
             
-            # Layout strategy: Create rows of units along perimeter
-            # Start from left, work across, then move to next row
+            # Layout strategy: Divide available space into grid cells
+            # Place units in cells, filling left-to-right, top-to-bottom
             
-            current_x = minx
-            current_y = miny
-            row_height = typical_depth
+            # Get available space bounds
+            if isinstance(available, MultiPolygon):
+                # Use all regions
+                available_regions = list(available.geoms)
+                available_regions.sort(key=lambda p: p.area, reverse=True)
+                logger.info(f"Available area has {len(available_regions)} regions")
+            else:
+                available_regions = [available]
             
+            # Calculate typical unit dimensions
+            avg_area = np.mean([spec["target_area"] for spec in unit_specs])
+            typical_width = np.sqrt(avg_area * 1.2)  # Slightly wider
+            typical_depth = avg_area / typical_width
+            
+            logger.info(f"Typical unit: {typical_width:.1f}m × {typical_depth:.1f}m = {avg_area:.1f}m²")
+            
+            # Try to place each unit
             placed_units = []
             
             for spec in unit_specs:
                 target_area = spec["target_area"]
                 
-                # Calculate unit dimensions based on target area
-                unit_width = np.sqrt(target_area * 1.3)
+                # Calculate this unit's dimensions
+                unit_width = np.sqrt(target_area * 1.2)
                 unit_depth = target_area / unit_width
                 
-                # Try to place unit at current position
-                unit_poly = box(current_x, current_y, current_x + unit_width, current_y + unit_depth)
+                best_unit = None
+                best_score = 0
                 
-                # Clip to available area
-                unit_clipped = unit_poly.intersection(available)
+                # Try each available region
+                for region in available_regions:
+                    if region.is_empty or region.area < target_area * 0.5:
+                        continue
+                    
+                    reg_bounds = region.bounds
+                    reg_minx, reg_miny, reg_maxx, reg_maxy = reg_bounds
+                    
+                    # Try multiple positions in this region
+                    # Grid sampling with 2m spacing
+                    x_positions = np.arange(reg_minx, reg_maxx - unit_width, 2.0)
+                    y_positions = np.arange(reg_miny, reg_maxy - unit_depth, 2.0)
+                    
+                    # Limit attempts for performance
+                    max_attempts = min(len(x_positions) * len(y_positions), 100)
+                    
+                    for x in x_positions:
+                        for y in y_positions:
+                            if max_attempts <= 0:
+                                break
+                            max_attempts -= 1
+                            
+                            # Create unit box
+                            unit_poly = box(x, y, x + unit_width, y + unit_depth)
+                            
+                            # Clip to region
+                            unit_clipped = unit_poly.intersection(region)
+                            
+                            if unit_clipped.is_empty or unit_clipped.area < target_area * 0.60:
+                                continue
+                            
+                            # Score based on area match
+                            area_match = min(unit_clipped.area / target_area, 1.0)
+                            
+                            # Check perimeter contact (window access)
+                            perimeter_contact = unit_clipped.boundary.intersection(self.boundary.boundary)
+                            perimeter_length = perimeter_contact.length if hasattr(perimeter_contact, 'length') else 0
+                            perimeter_score = min(perimeter_length / 2.0, 1.0)
+                            
+                            # Total score: heavily weight area match
+                            score = area_match * 10 + perimeter_score * 2
+                            
+                            if score > best_score:
+                                best_unit = unit_clipped
+                                best_score = score
+                        
+                        if max_attempts <= 0:
+                            break
                 
-                # Check if placement is valid
-                if not unit_clipped.is_empty and unit_clipped.area >= target_area * 0.70:
-                    # Good placement
+                # Place best unit if found
+                if best_unit:
                     placed_units.append({
                         "type": spec["type"],
-                        "polygon": unit_clipped,
-                        "area": unit_clipped.area
+                        "polygon": best_unit,
+                        "area": best_unit.area
                     })
                     
-                    # Remove from available
-                    available = available.difference(unit_clipped.buffer(0.05))
+                    # Remove from all regions
+                    buffer_dist = 0.05
+                    new_regions = []
+                    for region in available_regions:
+                        remaining = region.difference(best_unit.buffer(buffer_dist))
+                        if not remaining.is_empty:
+                            if isinstance(remaining, MultiPolygon):
+                                new_regions.extend(list(remaining.geoms))
+                            else:
+                                new_regions.append(remaining)
+                    available_regions = new_regions
                     
-                    # Move to next position (right)
-                    current_x += unit_width
-                    
-                    # Check if we need to move to next row
-                    if current_x + unit_width > maxx:
-                        current_x = minx
-                        current_y += row_height
+                    # Sort by area
+                    available_regions.sort(key=lambda p: p.area, reverse=True)
                 else:
-                    # Try next row
-                    current_x = minx
-                    current_y += row_height
-                    
-                    # Try again at new position
-                    unit_poly = box(current_x, current_y, current_x + unit_width, current_y + unit_depth)
-                    unit_clipped = unit_poly.intersection(available)
-                    
-                    if not unit_clipped.is_empty and unit_clipped.area >= target_area * 0.60:
-                        placed_units.append({
-                            "type": spec["type"],
-                            "polygon": unit_clipped,
-                            "area": unit_clipped.area
-                        })
-                        available = available.difference(unit_clipped.buffer(0.05))
-                        current_x += unit_width
-                
-                # Stop if we've run out of space
-                if current_y > maxy:
-                    logger.warning(f"Ran out of vertical space, placed {len(placed_units)}/{len(unit_specs)} units")
-                    break
+                    logger.debug(f"Could not place {spec['type']} unit ({target_area:.1f}m²)")
             
             # Create final units list with proper IDs
             for i, unit_data in enumerate(placed_units, 1):
