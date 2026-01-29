@@ -1,0 +1,14 @@
+# render.yaml - Render.com Configuration
+# Place this in the root of generator-service/
+
+services:
+  - type: web
+    name: floorplangen-generator
+    runtime: docker
+    region: oregon
+    plan: free
+    branch: main
+    rootDir: generator-service
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    # Render automatically sets PORT env variable

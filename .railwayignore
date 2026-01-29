@@ -1,0 +1,10 @@
+test_generator.py
+deploy-*.sh
+render.yaml
+DEPLOYMENT.md
+README.md
+Dockerfile.minimal
+*.md
+__pycache__
+*.pyc
+.git

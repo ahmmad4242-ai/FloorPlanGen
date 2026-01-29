@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install minimal dependencies
+RUN pip install --no-cache-dir fastapi==0.109.0 uvicorn[standard]==0.27.0
+
+# Copy minimal app
+COPY app/minimal.py ./app/minimal.py
+COPY app/__init__.py ./app/__init__.py
+
+# Railway sets PORT
+ENV PORT=8000
+
+# Run minimal app for testing
+CMD ["sh", "-c", "uvicorn app.minimal:app --host 0.0.0.0 --port $PORT"]
