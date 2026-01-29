@@ -347,6 +347,19 @@ class ProfessionalLayoutEngine:
                             # Check if unit TOUCHES corridor (shared edge)
                             corridor_contact = unit_clipped.intersection(corridor_union.buffer(0.05))
                             has_corridor_contact = not corridor_contact.is_empty and corridor_contact.area < 0.1
+                            
+                            # NEW V2.2: Check corridor-facing width (minimum 2.5m for proper entrance)
+                            min_facing_width = pass_config.get("min_corridor_facing_width", 2.5)
+                            corridor_facing_edge = unit_clipped.boundary.intersection(corridor_union.buffer(0.1))
+                            
+                            if hasattr(corridor_facing_edge, 'length'):
+                                facing_width = corridor_facing_edge.length
+                            else:
+                                facing_width = 0
+                            
+                            # Skip if facing width too narrow (can't fit door properly)
+                            if facing_width > 0 and facing_width < min_facing_width:
+                                continue
                         except:
                             corridor_distance = 999
                             has_corridor_contact = False
@@ -588,6 +601,7 @@ class ProfessionalLayoutEngine:
                     "name": "strict",
                     "min_perimeter": 0.8,      # Relaxed to 0.8m (one facade)
                     "max_corridor_distance": 0.3,  # CRITICAL: Direct touch (30cm max)
+                    "min_corridor_facing_width": 2.5,  # NEW V2.2: Min 2.5m facing width
                     "min_area_match": 0.60,
                     "max_attempts": 500
                 }
@@ -605,6 +619,7 @@ class ProfessionalLayoutEngine:
                         "name": "relaxed",
                         "min_perimeter": 0.3,      # Very relaxed
                         "max_corridor_distance": 1.0,  # Close to corridor (1m max)
+                        "min_corridor_facing_width": 2.0,  # V2.2: Relaxed to 2.0m
                         "min_area_match": 0.50,
                         "max_attempts": 500
                     }
@@ -622,6 +637,7 @@ class ProfessionalLayoutEngine:
                         "name": "flexible",
                         "min_perimeter": 0.0,      # No perimeter requirement
                         "max_corridor_distance": 2.5,  # Still reasonable (2.5m max)
+                        "min_corridor_facing_width": 1.5,  # V2.2: Very relaxed (1.5m min)
                         "min_area_match": 0.40,    # Accept smaller units
                         "max_attempts": 600
                     }
