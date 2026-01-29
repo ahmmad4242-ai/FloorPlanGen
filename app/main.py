@@ -269,8 +269,6 @@ def generate_single_variant(
         
         # Place core with randomization
         core_config = arch_constraints.get("core") or constraints.get("core", {})
-        fixed_core = fixed_elements.get("core", [])
-        fixed_core = fixed_core[0] if fixed_core else None
         
         # Get core area from architectural constraints or use default
         if core_config and "area_m2" in core_config:
@@ -287,7 +285,7 @@ def generate_single_variant(
         
         # Get preferred location from architectural constraints
         preferred_location = core_config.get("preferred_location", "center")
-        if variant_number > 1 and not fixed_core:
+        if variant_number > 1:
             # For variant 2+, try different locations
             core_locations = ["center", "north", "south", "east", "west"]
             preferred_location = random.choice(core_locations)
@@ -295,8 +293,7 @@ def generate_single_variant(
         
         core = layout_engine.place_core(
             core_area=core_area,
-            preferred_location=preferred_location,
-            fixed_core=fixed_core
+            preferred_location=preferred_location
         )
         
         # Create professional corridor network (spine + branches)
