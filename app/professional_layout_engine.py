@@ -22,6 +22,12 @@ from typing import List, Dict, Tuple, Optional
 import numpy as np
 import logging
 
+# Import corridor pattern generator V2.2
+try:
+    from .corridor_patterns import CorridorPatternGenerator
+except ImportError:
+    from corridor_patterns import CorridorPatternGenerator
+
 logger = logging.getLogger(__name__)
 
 
@@ -110,20 +116,54 @@ class ProfessionalLayoutEngine:
     
     def create_visible_corridor_network(self,
                                        core: Polygon,
-                                       corridor_width: float = 2.5) -> List[Polygon]:
+                                       corridor_width: float = 2.5,
+                                       pattern: str = "auto") -> List[Polygon]:
         """
-        Create VISIBLE corridor network that:
-        1. Is clearly visible in floor plans (minimum 2.2m wide)
-        2. Takes up 8-12% of floor area (efficient)
-        3. Connects to core centrally
-        4. Provides access to all unit zones
-        5. Uses ONE main spine + minimal branches
+        Create VISIBLE corridor network with MULTIPLE PATTERNS (V2.2).
         
-        Returns list of corridor polygons.
+        Supports:
+        - "auto": Auto-select based on building shape (default)
+        - "T": T-shaped (main spine + branch) - balanced
+        - "U": U-shaped (3 sides) - rectangular buildings
+        - "L": L-shaped (2 perpendicular) - corner/narrow buildings
+        - "H": H-shaped (double-loaded + cross) - large buildings
+        - "+": Plus/Cross (4 directions) - square buildings
+        - "line": Single straight corridor - narrow buildings
+        
+        Args:
+            core: Core polygon
+            corridor_width: Corridor width in meters (2.2-2.5m)
+            pattern: Corridor pattern type or "auto"
+        
+        Returns:
+            List of corridor polygons
         """
         try:
-            # Ensure minimum width for visibility (but not too wide)
-            corridor_width = max(min(corridor_width, 2.5), 2.2)
+            # Use advanced pattern generator V2.2
+            generator = CorridorPatternGenerator(
+                boundary=self.boundary,
+                core=core,
+                corridor_width=corridor_width
+            )
+            
+            # Generate corridors with selected pattern
+            corridors = generator.generate(pattern=pattern, usable_area=self.usable_area)
+            
+            # Calculate metrics
+            total_corridor_area = sum(c.area for c in corridors)
+            corridor_ratio = total_corridor_area / self.area if self.area > 0 else 0
+            
+            logger.info(f"Created {pattern}-pattern corridor network:")
+            logger.info(f"  Total corridor area: {total_corridor_area:.2f} m²")
+            logger.info(f"  Corridor ratio: {corridor_ratio*100:.1f}% (target 8-12%)")
+            logger.info(f"  Segments: {len(corridors)}")
+            logger.info(f"  Width: {corridor_width:.2f} m")
+            
+            return corridors
+            
+        except Exception as e:
+            logger.error(f"Failed to create corridor network: {e}")
+            return []
             
             bounds = self.boundary.bounds
             minx, miny, maxx, maxy = bounds
