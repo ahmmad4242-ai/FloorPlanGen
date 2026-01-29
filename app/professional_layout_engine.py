@@ -23,10 +23,22 @@ import numpy as np
 import logging
 
 # Import corridor pattern generator V2.2
+# Try relative import first, then absolute
 try:
     from .corridor_patterns import CorridorPatternGenerator
-except ImportError:
-    from corridor_patterns import CorridorPatternGenerator
+    logger = logging.getLogger(__name__)
+    logger.info("✅ Imported CorridorPatternGenerator (relative)")
+except (ImportError, ValueError):
+    try:
+        from corridor_patterns import CorridorPatternGenerator
+        logger = logging.getLogger(__name__)
+        logger.info("✅ Imported CorridorPatternGenerator (absolute)")
+    except ImportError as e:
+        # Fallback: use inline T-pattern only
+        logger = logging.getLogger(__name__)
+        logger.error(f"❌ Failed to import CorridorPatternGenerator: {e}")
+        logger.warning("⚠️ Using fallback T-pattern corridor generation")
+        CorridorPatternGenerator = None
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +151,11 @@ class ProfessionalLayoutEngine:
             List of corridor polygons
         """
         try:
+            # Check if CorridorPatternGenerator is available
+            if CorridorPatternGenerator is None:
+                logger.warning("⚠️ CorridorPatternGenerator not available, using fallback T-pattern")
+                return self._create_fallback_T_pattern_corridors(core, corridor_width)
+            
             # Use advanced pattern generator V2.2
             generator = CorridorPatternGenerator(
                 boundary=self.boundary,
@@ -274,6 +291,70 @@ class ProfessionalLayoutEngine:
             
         except Exception as e:
             logger.error(f"Failed to create corridor network: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def _create_fallback_T_pattern_corridors(self, core: Polygon, corridor_width: float) -> List[Polygon]:
+        """
+        Fallback T-pattern corridor generation (if CorridorPatternGenerator unavailable).
+        Simple cross/T pattern with main spine + perpendicular branch.
+        """
+        try:
+            w = max(min(corridor_width, 2.5), 2.2)
+            bounds = self.boundary.bounds
+            minx, miny, maxx, maxy = bounds
+            core_center = core.centroid
+            width = maxx - minx
+            height = maxy - miny
+            
+            corridors = []
+            
+            if width >= height:
+                # Horizontal main spine
+                main = box(minx, core_center.y - w/2, maxx, core_center.y + w/2)
+                main = main.intersection(self.usable_area)
+                if not main.is_empty:
+                    corridors.append(main)
+                
+                # Vertical branch (80% of height)
+                branch_len = height * 0.8 / 2
+                branch = box(
+                    core_center.x - w/2,
+                    core_center.y - branch_len,
+                    core_center.x + w/2,
+                    core_center.y + branch_len
+                )
+                branch = branch.intersection(self.usable_area)
+                if not branch.is_empty:
+                    corridors.append(branch)
+            else:
+                # Vertical main spine
+                main = box(core_center.x - w/2, miny, core_center.x + w/2, maxy)
+                main = main.intersection(self.usable_area)
+                if not main.is_empty:
+                    corridors.append(main)
+                
+                # Horizontal branch (80% of width)
+                branch_len = width * 0.8 / 2
+                branch = box(
+                    core_center.x - branch_len,
+                    core_center.y - w/2,
+                    core_center.x + branch_len,
+                    core_center.y + w/2
+                )
+                branch = branch.intersection(self.usable_area)
+                if not branch.is_empty:
+                    corridors.append(branch)
+            
+            total_area = sum(c.area for c in corridors)
+            ratio = total_area / self.area * 100 if self.area > 0 else 0
+            logger.info(f"Created fallback T-pattern: {len(corridors)} corridors, {total_area:.1f}m² ({ratio:.1f}%)")
+            
+            return corridors
+            
+        except Exception as e:
+            logger.error(f"Fallback corridor generation failed: {e}")
             return []
     
     def _place_units_pass(self,
