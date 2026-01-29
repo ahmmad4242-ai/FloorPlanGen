@@ -474,8 +474,8 @@ class ProfessionalLayoutEngine:
                 })
                 placed_count += 1
                 
-                # Remove from available regions (with proper wall spacing)
-                buffer_dist = 0.25  # 25cm spacing (wall thickness)
+                # ✅ V2.4: Remove from available regions (with proper wall spacing)
+                buffer_dist = 0.15  # 15cm spacing (wall thickness) - reduced for better density
                 new_regions = []
                 for region in available_regions:
                     remaining_area = region.difference(best_unit.buffer(buffer_dist))
@@ -567,8 +567,8 @@ class ProfessionalLayoutEngine:
                 else:
                     avg_area = 60  # default
                 
-                # Estimate units count (use 75% efficiency to be conservative)
-                estimated_units = int(available.area / avg_area * 0.75)
+                # ✅ V2.4: Estimate units count (use 85% efficiency for better space utilization)
+                estimated_units = int(available.area / avg_area * 0.85)
                 
                 # Apply bounds from total_units
                 min_units = total_units_config.get("min", 5)
@@ -658,8 +658,10 @@ class ProfessionalLayoutEngine:
             else:
                 available_regions = [available]
             
-            # Sort regions by area (largest first)
-            available_regions.sort(key=lambda p: p.area, reverse=True)
+            # ✅ V2.4: Don't sort by area! This causes all units to cluster in largest region.
+            # Instead, shuffle for balanced distribution across all regions
+            import random
+            random.shuffle(available_regions)  # Random order for balanced distribution
             
             logger.info(f"Available area has {len(available_regions)} regions")
             
@@ -684,7 +686,7 @@ class ProfessionalLayoutEngine:
                     "max_corridor_distance": 0.3,  # CRITICAL: Direct touch (30cm max)
                     "min_corridor_facing_width": 2.5,  # NEW V2.2: Min 2.5m facing width
                     "min_area_match": 0.60,
-                    "max_attempts": 500
+                    "max_attempts": 800  # ✅ V2.4: Increased from 500 to 800
                 }
             )
             

@@ -46,6 +46,118 @@ class CorridorPatternGenerator:
         
         logger.info(f"Corridor generator initialized: {self.width:.1f}m × {self.height:.1f}m")
     
+    def _ensure_core_connection(self, corridors: List[Polygon]) -> List[Polygon]:
+        """
+        ✅ V2.4: Ensure ALL corridors connect to the core.
+        Critical fix for isolated corridor problem.
+        
+        Args:
+            corridors: List of corridor polygons
+        
+        Returns:
+            Enhanced corridors list with core connections guaranteed
+        """
+        if not corridors:
+            return corridors
+        
+        # Buffer core slightly for connection detection
+        core_buffer = self.core.buffer(0.1)
+        
+        connected_corridors = []
+        unconnected_corridors = []
+        
+        # Classify corridors
+        for corridor in corridors:
+            if corridor.intersects(core_buffer):
+                connected_corridors.append(corridor)
+            else:
+                unconnected_corridors.append(corridor)
+        
+        # If NO corridors connect to core, extend the closest one
+        if not connected_corridors and corridors:
+            logger.warning("⚠️ NO corridors connect to core! Extending closest corridor...")
+            
+            # Find closest corridor to core
+            closest_corridor = min(corridors, key=lambda c: c.distance(self.core))
+            
+            # Create connector from corridor to core
+            core_point = self.core.centroid
+            corridor_point = closest_corridor.centroid
+            
+            # Create connecting corridor
+            connector = self._create_connecting_corridor(
+                corridor_point,
+                core_point,
+                self.corridor_width
+            )
+            
+            corridors.append(connector)
+            logger.info("✅ Added connector to core")
+        
+        # Ensure main corridor network connects to core
+        elif connected_corridors:
+            corridor_network = unary_union(connected_corridors)
+            
+            # Connect unconnected corridors to network
+            for uncorr in unconnected_corridors:
+                if not uncorr.intersects(corridor_network.buffer(0.1)):
+                    # Create connector
+                    uncorr_point = uncorr.centroid
+                    network_point = corridor_network.centroid
+                    
+                    connector = self._create_connecting_corridor(
+                        uncorr_point,
+                        network_point,
+                        self.corridor_width
+                    )
+                    
+                    corridors.append(connector)
+                    logger.info("✅ Connected isolated corridor to network")
+        
+        return corridors
+    
+    def _create_connecting_corridor(self, point1, point2, width: float) -> Polygon:
+        """
+        Create a connecting corridor between two points.
+        
+        Args:
+            point1: Start point
+            point2: End point
+            width: Corridor width
+        
+        Returns:
+            Connecting corridor polygon
+        """
+        x1, y1 = point1.x, point1.y
+        x2, y2 = point2.x, point2.y
+        
+        # Determine orientation (horizontal or vertical)
+        dx = abs(x2 - x1)
+        dy = abs(y2 - y1)
+        
+        if dx > dy:
+            # Horizontal connector
+            connector = box(
+                min(x1, x2),
+                y1 - width / 2,
+                max(x1, x2),
+                y1 + width / 2
+            )
+        else:
+            # Vertical connector
+            connector = box(
+                x1 - width / 2,
+                min(y1, y2),
+                x1 + width / 2,
+                max(y1, y2)
+            )
+        
+        # Clip to boundary
+        if self.boundary.contains(connector):
+            return connector
+        else:
+            return connector.intersection(self.boundary)
+    
     def select_pattern(self, pattern: str = "auto") -> str:
         """
         Auto-select best corridor pattern based on building shape.
@@ -114,6 +226,9 @@ class CorridorPatternGenerator:
                 if not clipped_corridor.is_empty:
                     clipped.append(clipped_corridor)
             corridors = clipped
+        
+        # ✅ V2.4: CRITICAL - Ensure core connection
+        corridors = self._ensure_core_connection(corridors)
         
         # Log results
         total_area = sum(c.area for c in corridors)
