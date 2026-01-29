@@ -176,21 +176,33 @@ async def generate_floor_plan(request: GenerateRequest):
             {
                 "variant_id": v["variant_id"],
                 "variant_number": v["variant_number"],
-                "score": v["score"],
+                "status": v.get("status", "success"),  # ✅ Include status
+                "score": v.get("score", 0),
                 "metadata": v["metadata"],
-                "compliance": v["compliance"],
+                "compliance": v.get("compliance", {}),
+                "error_message": v.get("error_message"),  # ✅ Include error if failed
                 "dxf_url": v.get("dxf_file_path"),
-                "svg_url": v.get("svg_file_path")  # ✅ Add SVG path!
+                "svg_url": v.get("svg_file_path")
             }
             for v in variants
         ]
         
         logger.info(f"Generated {len(variants)} variants for job {job_id}, stored in memory")
         
+        # Count successful vs failed variants
+        successful_variants = [v for v in variants if v.get("status") == "success"]
+        failed_variants = [v for v in variants if v.get("status") == "failed"]
+        
+        status_message = f"Generated {len(variants)} variants"
+        if failed_variants:
+            status_message += f" ({len(successful_variants)} successful, {len(failed_variants)} failed)"
+        else:
+            status_message += " successfully"
+        
         return GenerateResponse(
             job_id=job_id,
             status="completed",
-            message=f"Generated {len(variants)} variants successfully"
+            message=status_message
         )
         
     except Exception as e:
@@ -224,7 +236,10 @@ async def generate_variants_internal(
         
         logger.info(f"Extracted: boundary={boundary.area:.2f}m², obstacles={len(obstacles)}")
         
-        # Step 2: Generate multiple variants
+        # Step 2: Generate multiple variants with error handling
+        successful_count = 0
+        failed_count = 0
+        
         for i in range(variant_count):
             try:
                 variant = generate_single_variant(
@@ -236,9 +251,23 @@ async def generate_variants_internal(
                     constraints=constraints
                 )
                 variants.append(variant)
+                successful_count += 1
+                logger.info(f"✅ Variant {i+1}/{variant_count} generated successfully ({len(variant.get('units', []))} units)")
             except Exception as e:
-                logger.error(f"Failed to generate variant {i+1}: {e}")
+                failed_count += 1
+                logger.error(f"❌ Failed to generate variant {i+1}/{variant_count}: {e}")
+                
+                # Create placeholder variant with 0 units
+                placeholder_variant = create_failed_variant_placeholder(
+                    project_id=project_id,
+                    variant_number=i + 1,
+                    boundary=boundary,
+                    error_message=str(e)
+                )
+                variants.append(placeholder_variant)
+                logger.warning(f"Created placeholder variant {i+1} with 0 units (error: {str(e)[:100]})")
         
+        logger.info(f"🎯 Variant generation complete: {successful_count} successful, {failed_count} failed, {len(variants)} total")
         return variants
         
     except Exception as e:
@@ -484,8 +513,10 @@ def generate_single_variant(
         variant_data = {
             "variant_id": variant_id,
             "variant_number": variant_number,
+            "status": "success",  # ✅ Mark as successful
             "dxf_file_path": dxf_path,
             "svg_file_path": svg_path,
+            "units": units,  # ✅ Include full units data
             "metadata": {
                 **metrics,
                 "units_by_type": units_by_type
@@ -500,6 +531,52 @@ def generate_single_variant(
     except Exception as e:
         logger.error(f"Failed to generate variant {variant_number}: {e}")
         raise
+
+
+def create_failed_variant_placeholder(
+    project_id: str,
+    variant_number: int,
+    boundary,
+    error_message: str
+) -> Dict:
+    """
+    Create a placeholder variant for failed generation attempts.
+    This ensures we always return the requested number of variants,
+    with failed ones marked as status='failed' and units_count=0.
+    """
+    
+    variant_id = f"var-{uuid.uuid4().hex[:12]}"
+    total_area = boundary.area if boundary else 0
+    
+    placeholder_data = {
+        "variant_id": variant_id,
+        "variant_number": variant_number,
+        "status": "failed",  # ✅ Mark as failed
+        "error_message": error_message[:200],  # Truncate long errors
+        "dxf_file_path": None,
+        "svg_file_path": None,
+        "units": [],  # ✅ Empty units list
+        "metadata": {
+            "total_area": total_area,
+            "usable_area": total_area,
+            "core_area": 0,
+            "corridor_area": 0,
+            "units_area": 0,
+            "efficiency": 0,
+            "corridor_ratio": 0,
+            "units_count": 0,  # ✅ 0 units
+            "units_by_type": {}  # ✅ Empty distribution
+        },
+        "compliance": {
+            "overall_passed": False,
+            "score": 0,
+            "constraints": {}
+        },
+        "score": 0
+    }
+    
+    logger.info(f"Created failed placeholder for variant {variant_number}: {error_message[:100]}")
+    return placeholder_data
 
 
 def create_sample_dxf(project_id: str) -> str:
