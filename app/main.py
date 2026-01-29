@@ -20,7 +20,7 @@ import ezdxf
 
 from .dxf_reader import DXFReader
 from .space_partition import ArchitecturalSpacePartitioner as SpacePartitioner
-from .architectural_layout_engine import ArchitecturalLayoutEngine  # NEW: Professional layout engine
+from .professional_layout_engine import ProfessionalLayoutEngine  # NEW: FIXED professional layout engine
 from .constraint_solver import ConstraintSolver
 from .dxf_exporter import DXFExporter
 from .svg_generator import SVGGenerator
@@ -263,9 +263,9 @@ def generate_single_variant(
         # Extract architectural constraints if provided
         arch_constraints = constraints.get("architectural_constraints", {})
         
-        # Step 1: Professional Architectural Layout (NEW ENGINE!)
-        logger.info("Using ArchitecturalLayoutEngine for professional floor plan generation")
-        layout_engine = ArchitecturalLayoutEngine(boundary, obstacles)
+        # Step 1: Professional Architectural Layout (FIXED ENGINE!)
+        logger.info("Using ProfessionalLayoutEngine - FIXED for visible corridors and proper connectivity")
+        layout_engine = ProfessionalLayoutEngine(boundary, obstacles)
         
         # Place core with randomization
         core_config = arch_constraints.get("core") or constraints.get("core", {})
@@ -322,11 +322,10 @@ def generate_single_variant(
         
         logger.info(f"Variant {variant_number}: corridor_width={corridor_width:.2f}m, layout={layout_type}")
         
-        # NEW: Create corridor spine (main corridor + branches)
-        corridors = layout_engine.create_corridor_spine(
+        # NEW: Create VISIBLE corridor network (10-15% of floor area)
+        corridors = layout_engine.create_visible_corridor_network(
             core=core,
-            corridor_width=corridor_width,
-            layout_type=layout_type
+            corridor_width=corridor_width
         )
         
         # Prepare unit types for layout engine - support both "units" and "unit_types"
@@ -357,15 +356,29 @@ def generate_single_variant(
         
         logger.info(f"Planning units: {unit_types_for_layout}")
         
-        # NEW: Layout units with proper adhesion and organization
-        units = layout_engine.layout_units_along_perimeter(
+        # NEW: Layout units with PROPER corridor access and perimeter windows
+        units = layout_engine.layout_units_with_corridor_access(
             core=core,
             corridors=corridors,
             unit_types=unit_types_for_layout
         )
         
-        # Calculate metrics
-        metrics = layout_engine.calculate_metrics(core, corridors, units)
+        # Calculate metrics (units area, corridor area, efficiency)
+        units_area = sum(u["area"] for u in units)
+        corridor_area = sum(c.area for c in corridors)
+        core_area_actual = core.area if core else 0
+        total_area = boundary.area
+        
+        metrics = {
+            "total_area": total_area,
+            "usable_area": total_area,
+            "core_area": core_area_actual,
+            "corridor_area": corridor_area,
+            "units_area": units_area,
+            "efficiency": units_area / total_area if total_area > 0 else 0,
+            "corridor_ratio": corridor_area / total_area if total_area > 0 else 0,
+            "units_count": len(units)
+        }
         
         # Step 2: Constraint Solving & Validation
         solver = ConstraintSolver(constraints)

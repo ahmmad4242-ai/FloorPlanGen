@@ -22,6 +22,8 @@ from typing import List, Dict, Tuple, Optional
 import numpy as np
 import logging
 
+from .visible_corridor_builder import VisibleCorridorBuilder
+
 logger = logging.getLogger(__name__)
 
 
@@ -119,113 +121,35 @@ class ArchitecturalLayoutEngine:
                              corridor_width: float,
                              layout_type: str = "double_loaded") -> List[Polygon]:
         """
-        Create main corridor spine connecting core to building perimeter.
+        Create VISIBLE corridor network using professional corridor builder.
         
-        Strategy:
-        1. Main horizontal corridor through center
-        2. Vertical branches to reach all areas
-        3. Ensure all regions are accessible
-        
-        This creates a logical network that reaches all units.
+        This creates corridors that are:
+        1. Wide enough to see (min 2.5m)
+        2. Connected in a logical grid
+        3. Reach all areas of the building
+        4. Show clearly in floor plans
         """
-        corridors = []
-        
         try:
-            core_bounds = core.bounds
-            core_minx, core_miny, core_maxx, core_maxy = core_bounds
-            core_center_x = (core_minx + core_maxx) / 2
-            core_center_y = (core_miny + core_maxy) / 2
+            # Use professional corridor builder
+            builder = VisibleCorridorBuilder(self.boundary, core)
             
-            building_bounds = self.boundary.bounds
-            bldg_minx, bldg_miny, bldg_maxx, bldg_maxy = building_bounds
+            # Ensure minimum width for visibility
+            corridor_width = max(corridor_width, 2.5)
             
-            # Strategy: Minimal corridor network around core + side access
-            # Much less area than old approach
-            
-            # 1. Ring corridor around core (double-loaded access)
-            ring_extension = corridor_width * 1.5  # Minimal extension
-            
-            # Top corridor (north of core)
-            top_corridor = box(
-                core_minx - ring_extension,
-                core_maxy,
-                core_maxx + ring_extension,
-                core_maxy + corridor_width
-            )
-            corridors.append(top_corridor)
-            
-            # Bottom corridor (south of core)
-            bottom_corridor = box(
-                core_minx - ring_extension,
-                core_miny - corridor_width,
-                core_maxx + ring_extension,
-                core_miny
-            )
-            corridors.append(bottom_corridor)
-            
-            # Left corridor (west of core)
-            left_corridor = box(
-                core_minx - corridor_width,
-                core_miny - ring_extension,
-                core_minx,
-                core_maxy + ring_extension
-            )
-            corridors.append(left_corridor)
-            
-            # Right corridor (east of core)
-            right_corridor = box(
-                core_maxx,
-                core_miny - ring_extension,
-                core_maxx + corridor_width,
-                core_maxy + ring_extension
-            )
-            corridors.append(right_corridor)
-            
-            # 2. Horizontal spine (connects to building edges)
-            # Only if building is large enough
-            if self.width > (core_maxx - core_minx) * 2:
-                # Left horizontal connector
-                left_spine = box(
-                    bldg_minx,
-                    core_center_y - corridor_width / 2,
-                    core_minx - corridor_width,
-                    core_center_y + corridor_width / 2
-                )
-                corridors.append(left_spine)
-                
-                # Right horizontal connector
-                right_spine = box(
-                    core_maxx + corridor_width,
-                    core_center_y - corridor_width / 2,
-                    bldg_maxx,
-                    core_center_y + corridor_width / 2
-                )
-                corridors.append(right_spine)
-            
-            # Clip all corridors to usable area and merge overlaps
-            clipped_corridors = []
-            for corridor in corridors:
-                clipped = corridor.intersection(self.usable_area)
-                if not clipped.is_empty and clipped.area > 0:
-                    clipped_corridors.append(clipped)
-            
-            # Merge overlapping corridors for cleaner result
-            if clipped_corridors:
-                corridor_union = unary_union(clipped_corridors)
-                if isinstance(corridor_union, MultiPolygon):
-                    final_corridors = list(corridor_union.geoms)
-                else:
-                    final_corridors = [corridor_union]
+            if layout_type == "double_loaded":
+                corridors = builder.build_double_loaded_network(corridor_width)
             else:
-                final_corridors = []
+                corridors = builder.build_single_loaded_network(corridor_width)
             
-            total_corridor_area = sum(c.area for c in final_corridors)
+            total_corridor_area = sum(c.area for c in corridors)
             corridor_ratio = total_corridor_area / self.area if self.area > 0 else 0
             
-            logger.info(f"Created corridor network: {total_corridor_area:.2f} m² ({corridor_ratio*100:.1f}% of total)")
-            logger.info(f"Layout type: {layout_type}, Corridors: {len(final_corridors)}")
+            logger.info(f"Created VISIBLE corridor network:")
+            logger.info(f"  Area: {total_corridor_area:.2f} m² ({corridor_ratio*100:.1f}%)")
+            logger.info(f"  Segments: {len(corridors)}")
+            logger.info(f"  Layout: {layout_type}")
             
-            return final_corridors
+            return corridors
             
         except Exception as e:
             logger.error(f"Failed to create corridor spine: {e}")
