@@ -151,26 +151,26 @@ class ProfessionalLayoutEngine:
                 if not main_corridor.is_empty:
                     corridors.append(main_corridor)
                 
-                # Short vertical branches to reach top/bottom zones (only 30% of height)
-                branch_length = height * 0.3
+                # Extended vertical branches to reach top/bottom zones (80% of height)
+                branch_length = height * 0.8
                 
-                # North branch (if needed)
+                # North branch (extended to reach top units)
                 if height > corridor_width * 3:  # Only if building is tall enough
                     north_branch = box(
                         core_centroid.x - corridor_width / 2,
                         core_centroid.y + corridor_width / 2,
                         core_centroid.x + corridor_width / 2,
-                        min(maxy, core_centroid.y + branch_length)
+                        min(maxy - corridor_width, core_centroid.y + branch_length)
                     )
                     north_branch = north_branch.intersection(self.usable_area)
                     if not north_branch.is_empty and north_branch.area > corridor_width * 2:
                         corridors.append(north_branch)
                 
-                # South branch (if needed)
+                # South branch (extended to reach bottom units)
                 if height > corridor_width * 3:
                     south_branch = box(
                         core_centroid.x - corridor_width / 2,
-                        max(miny, core_centroid.y - branch_length),
+                        max(miny + corridor_width, core_centroid.y - branch_length),
                         core_centroid.x + corridor_width / 2,
                         core_centroid.y - corridor_width / 2
                     )
@@ -193,25 +193,25 @@ class ProfessionalLayoutEngine:
                 if not main_corridor.is_empty:
                     corridors.append(main_corridor)
                 
-                # Short horizontal branches to reach left/right zones (only 30% of width)
-                branch_length = width * 0.3
+                # Extended horizontal branches to reach left/right zones (80% of width)
+                branch_length = width * 0.8
                 
-                # East branch (if needed)
+                # East branch (extended to reach right units)
                 if width > corridor_width * 3:
                     east_branch = box(
                         core_centroid.x + corridor_width / 2,
                         core_centroid.y - corridor_width / 2,
-                        min(maxx, core_centroid.x + branch_length),
+                        min(maxx - corridor_width, core_centroid.x + branch_length),
                         core_centroid.y + corridor_width / 2
                     )
                     east_branch = east_branch.intersection(self.usable_area)
                     if not east_branch.is_empty and east_branch.area > corridor_width * 2:
                         corridors.append(east_branch)
                 
-                # West branch (if needed)
+                # West branch (extended to reach left units)
                 if width > corridor_width * 3:
                     west_branch = box(
-                        max(minx, core_centroid.x - branch_length),
+                        max(minx + corridor_width, core_centroid.x - branch_length),
                         core_centroid.y - corridor_width / 2,
                         core_centroid.x - corridor_width / 2,
                         core_centroid.y + corridor_width / 2
@@ -301,11 +301,15 @@ class ProfessionalLayoutEngine:
                         if perimeter_length < pass_config["min_perimeter"]:
                             continue
                         
-                        # Check corridor proximity
+                        # Check corridor proximity AND contact
                         try:
                             corridor_distance = unit_clipped.distance(corridor_union)
+                            # Check if unit TOUCHES corridor (shared edge)
+                            corridor_contact = unit_clipped.intersection(corridor_union.buffer(0.05))
+                            has_corridor_contact = not corridor_contact.is_empty and corridor_contact.area < 0.1
                         except:
                             corridor_distance = 999
+                            has_corridor_contact = False
                         
                         # Apply corridor distance requirement from config
                         if corridor_distance > pass_config["max_corridor_distance"]:
@@ -315,9 +319,10 @@ class ProfessionalLayoutEngine:
                         area_match = min(unit_clipped.area / target_area, target_area / unit_clipped.area)
                         perimeter_score = min(perimeter_length / 3.0, 1.0)
                         corridor_score = max(0, 1.0 - corridor_distance / pass_config["max_corridor_distance"])
+                        contact_bonus = 2.0 if has_corridor_contact else 0  # Bonus for touching corridor
                         
-                        # Weighted score
-                        score = area_match * 8 + perimeter_score * 4 + corridor_score * 4
+                        # Weighted score (contact is CRITICAL)
+                        score = area_match * 8 + perimeter_score * 3 + corridor_score * 4 + contact_bonus
                         
                         if score > best_score:
                             best_unit = unit_clipped
@@ -335,8 +340,8 @@ class ProfessionalLayoutEngine:
                 })
                 placed_count += 1
                 
-                # Remove from available regions
-                buffer_dist = 0.05
+                # Remove from available regions (with proper wall spacing)
+                buffer_dist = 0.25  # 25cm spacing (wall thickness)
                 new_regions = []
                 for region in available_regions:
                     remaining_area = region.difference(best_unit.buffer(buffer_dist))
@@ -532,8 +537,8 @@ class ProfessionalLayoutEngine:
             placed_units = []
             remaining_specs = list(unit_specs)
             
-            # PASS 1: Strict placement (perimeter + corridor)
-            logger.info("Pass 1: Strict placement (perimeter + corridor access)...")
+            # PASS 1: Strict placement (DIRECT corridor adjacency)
+            logger.info("Pass 1: Strict placement (DIRECT corridor access)...")
             remaining_specs = self._place_units_pass(
                 remaining_specs,
                 available_regions,
@@ -541,14 +546,14 @@ class ProfessionalLayoutEngine:
                 placed_units,
                 pass_config={
                     "name": "strict",
-                    "min_perimeter": 1.8,      # Relaxed from 2.5m
-                    "max_corridor_distance": 3.0,
+                    "min_perimeter": 0.8,      # Relaxed to 0.8m (one facade)
+                    "max_corridor_distance": 0.3,  # CRITICAL: Direct touch (30cm max)
                     "min_area_match": 0.60,
                     "max_attempts": 500
                 }
             )
             
-            # PASS 2: Relaxed placement (near perimeter OR corridor)
+            # PASS 2: Relaxed placement (close to corridor)
             if remaining_specs:
                 logger.info(f"Pass 2: Relaxed placement ({len(remaining_specs)} remaining)...")
                 remaining_specs = self._place_units_pass(
@@ -558,14 +563,14 @@ class ProfessionalLayoutEngine:
                     placed_units,
                     pass_config={
                         "name": "relaxed",
-                        "min_perimeter": 1.0,      # More relaxed
-                        "max_corridor_distance": 6.0,  # Further from corridor OK
+                        "min_perimeter": 0.3,      # Very relaxed
+                        "max_corridor_distance": 1.0,  # Close to corridor (1m max)
                         "min_area_match": 0.50,
                         "max_attempts": 500
                     }
                 )
             
-            # PASS 3: Flexible placement (fill remaining space)
+            # PASS 3: Flexible placement (reasonable corridor distance)
             if remaining_specs:
                 logger.info(f"Pass 3: Flexible placement ({len(remaining_specs)} remaining)...")
                 remaining_specs = self._place_units_pass(
@@ -576,7 +581,7 @@ class ProfessionalLayoutEngine:
                     pass_config={
                         "name": "flexible",
                         "min_perimeter": 0.0,      # No perimeter requirement
-                        "max_corridor_distance": 10.0,  # Very relaxed
+                        "max_corridor_distance": 2.5,  # Still reasonable (2.5m max)
                         "min_area_match": 0.40,    # Accept smaller units
                         "max_attempts": 600
                     }
