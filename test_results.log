@@ -1,0 +1,35 @@
+================================================================================
+🏗️  COMPREHENSIVE ARCHITECTURAL CONSTRAINTS TEST
+================================================================================
+Generator: https://floorplangen-generator.onrender.com
+Project ID: arch-test-1769696361
+Timestamp: 2026-01-29 14:19:21
+================================================================================
+
+📋 Test Constraints:
+   Total Units: 8 (4×1BR + 3×2BR + 1×3BR)
+   Core Area: 45m²
+   Corridor Width: 2.2m
+
+Step 1: Checking generator health...
+   ✅ Generator: healthy
+   📦 Dependencies: ezdxf=✓, shapely=✓, ortools=✓
+
+Step 2: Generating variants with architectural constraints...
+   ✅ Job created: job-bfcee9fb9110
+   ⏳ Waiting for generation...
+
+Step 3: Retrieving variants...
+   ✅ Retrieved 2 variants
+
+================================================================================
+📊 ARCHITECTURAL CONSTRAINTS VALIDATION
+================================================================================
+
+🔍 Variant 1:
+--------------------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/webapp/test_architectural_constraints.py", line 122, in <module>
+    metadata = variant.get("metadata", {})
+               ^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'get'
