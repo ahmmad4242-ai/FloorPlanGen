@@ -236,25 +236,154 @@ class ProfessionalLayoutEngine:
             logger.error(f"Failed to create corridor network: {e}")
             return []
     
+    def _place_units_pass(self,
+                          unit_specs: List[Dict],
+                          available_regions: List[Polygon],
+                          corridor_union: Polygon,
+                          placed_units: List[Dict],
+                          pass_config: Dict) -> List[Dict]:
+        """
+        Single placement pass with specific configuration.
+        Returns remaining unplaced unit specs.
+        """
+        remaining = []
+        pass_name = pass_config["name"]
+        placed_count = 0
+        
+        for spec in unit_specs:
+            target_area = spec["target_area"]
+            unit_type = spec["type"]
+            
+            # Calculate unit dimensions
+            unit_width = np.sqrt(target_area * 1.3)
+            unit_depth = target_area / unit_width
+            
+            best_unit = None
+            best_score = -1
+            
+            # Try each available region
+            for region in available_regions:
+                if region.is_empty or region.area < target_area * 0.3:
+                    continue
+                
+                reg_bounds = region.bounds
+                reg_minx, reg_miny, reg_maxx, reg_maxy = reg_bounds
+                
+                # Fine grid sampling
+                x_step = max(0.2, unit_width * 0.15)
+                y_step = max(0.2, unit_depth * 0.15)
+                
+                x_positions = np.arange(reg_minx, reg_maxx - unit_width * 0.2, x_step)
+                y_positions = np.arange(reg_miny, reg_maxy - unit_depth * 0.2, y_step)
+                
+                max_attempts = pass_config["max_attempts"]
+                attempts = 0
+                
+                for x in x_positions:
+                    for y in y_positions:
+                        if attempts >= max_attempts:
+                            break
+                        attempts += 1
+                        
+                        # Create unit box
+                        unit_poly = box(x, y, x + unit_width, y + unit_depth)
+                        unit_clipped = unit_poly.intersection(region)
+                        
+                        # Check minimum area
+                        if unit_clipped.is_empty or unit_clipped.area < target_area * pass_config["min_area_match"]:
+                            continue
+                        
+                        # Check perimeter access
+                        perimeter_contact = unit_clipped.boundary.intersection(self.boundary.boundary)
+                        perimeter_length = perimeter_contact.length if hasattr(perimeter_contact, 'length') else 0
+                        
+                        # Apply perimeter requirement from config
+                        if perimeter_length < pass_config["min_perimeter"]:
+                            continue
+                        
+                        # Check corridor proximity
+                        try:
+                            corridor_distance = unit_clipped.distance(corridor_union)
+                        except:
+                            corridor_distance = 999
+                        
+                        # Apply corridor distance requirement from config
+                        if corridor_distance > pass_config["max_corridor_distance"]:
+                            continue
+                        
+                        # Score this placement
+                        area_match = min(unit_clipped.area / target_area, target_area / unit_clipped.area)
+                        perimeter_score = min(perimeter_length / 3.0, 1.0)
+                        corridor_score = max(0, 1.0 - corridor_distance / pass_config["max_corridor_distance"])
+                        
+                        # Weighted score
+                        score = area_match * 8 + perimeter_score * 4 + corridor_score * 4
+                        
+                        if score > best_score:
+                            best_unit = unit_clipped
+                            best_score = score
+                    
+                    if attempts >= max_attempts:
+                        break
+            
+            # Place best unit if found
+            if best_unit and best_score > 0:
+                placed_units.append({
+                    "type": unit_type,
+                    "polygon": best_unit,
+                    "area": best_unit.area
+                })
+                placed_count += 1
+                
+                # Remove from available regions
+                buffer_dist = 0.05
+                new_regions = []
+                for region in available_regions:
+                    remaining_area = region.difference(best_unit.buffer(buffer_dist))
+                    if not remaining_area.is_empty:
+                        if isinstance(remaining_area, MultiPolygon):
+                            new_regions.extend(list(remaining_area.geoms))
+                        else:
+                            new_regions.append(remaining_area)
+                available_regions[:] = new_regions
+                available_regions.sort(key=lambda p: p.area, reverse=True)
+            else:
+                # Could not place this unit in this pass
+                remaining.append(spec)
+        
+        logger.info(f"  Pass '{pass_name}': Placed {placed_count} units")
+        return remaining
+    
     def layout_units_with_corridor_access(self,
                                          core: Polygon,
                                          corridors: List[Polygon],
-                                         unit_types: List[Dict]) -> List[Dict]:
+                                         unit_constraints: Dict) -> List[Dict]:
         """
-        Layout units that:
-        1. Are on building perimeter (windows to outside)  
-        2. Adjacent to corridors (can add doors easily)
-        3. Fill available space efficiently
-        4. Meet area requirements
+        Layout units DYNAMICALLY based on percentages (V2).
         
-        Strategy: Place units along perimeter, ensure they can reach corridors.
+        NEW: Supports two strategies:
+        1. "fill_available": Fill all available space based on percentages
+        2. "target_count": Place specific count (old behavior)
         
-        Unit types format:
-        [
-            {"type": "Studio", "count": 5, "min_area": 25, "max_area": 35},
-            {"type": "1BR", "count": 10, "min_area": 45, "max_area": 65},
-            ...
-        ]
+        Unit constraints format V2:
+        {
+            "generation_strategy": "fill_available" | "target_count",
+            "units": [
+                {
+                    "type": "Studio",
+                    "percentage": 20,  # NEW!
+                    "count": 5,        # OLD (optional)
+                    "priority": 1,
+                    "area": {"min": 25, "target": 30, "max": 35},
+                    "dimensions": {
+                        "corridor_width": {"min": 3.5, "max": 5.0},
+                        "depth": {"min": 4.0, "max": 6.5}
+                    }
+                }
+            ],
+            "total_units": {"min": 10, "max": 50},
+            "distribution_strategy": {...}
+        }
         """
         units = []
         
@@ -269,22 +398,111 @@ class ProfessionalLayoutEngine:
             
             logger.info(f"Available for units: {available.area:.2f} m²")
             
-            # Prepare unit specifications
-            unit_specs = []
-            for unit_type_spec in unit_types:
-                unit_type = unit_type_spec.get("type", "Studio")
-                count = unit_type_spec.get("count", 1)
-                min_area = unit_type_spec.get("min_area", 50)
-                max_area = unit_type_spec.get("max_area", 100)
+            # Extract constraints
+            generation_strategy = unit_constraints.get("generation_strategy", "fill_available")
+            unit_types_config = unit_constraints.get("units", [])
+            total_units_config = unit_constraints.get("total_units", {})
+            
+            logger.info(f"Generation strategy: {generation_strategy}")
+            
+            # ===== NEW: Estimate total units dynamically =====
+            if generation_strategy == "fill_available":
+                # Calculate average unit area
+                avg_area = 0
+                total_percentage = 0
+                for ut in unit_types_config:
+                    area_config = ut.get("area", {})
+                    if isinstance(area_config, dict):
+                        min_area = area_config.get("min", 50)
+                        max_area = area_config.get("max", 100)
+                        target_area = area_config.get("target", (min_area + max_area) / 2)
+                    else:
+                        target_area = 60  # default
+                    
+                    percentage = ut.get("percentage", 0)
+                    avg_area += target_area * percentage / 100
+                    total_percentage += percentage
                 
-                for i in range(count):
-                    target_area = np.random.uniform(min_area, max_area)
-                    unit_specs.append({
-                        "type": unit_type,
-                        "target_area": target_area,
-                        "min_area": min_area,
-                        "max_area": max_area
-                    })
+                if total_percentage > 0:
+                    avg_area = avg_area / (total_percentage / 100)
+                else:
+                    avg_area = 60  # default
+                
+                # Estimate units count (use 75% efficiency to be conservative)
+                estimated_units = int(available.area / avg_area * 0.75)
+                
+                # Apply bounds from total_units
+                min_units = total_units_config.get("min", 5)
+                max_units = total_units_config.get("max", 100)
+                estimated_units = max(min_units, min(estimated_units, max_units))
+                
+                logger.info(f"Estimated total units: {estimated_units} (avg area: {avg_area:.1f}m²)")
+                
+                # Calculate count for each type based on percentage
+                unit_specs = []
+                for ut in unit_types_config:
+                    unit_type = ut.get("type", "Studio")
+                    percentage = ut.get("percentage", 0)
+                    priority = ut.get("priority", 1)
+                    
+                    # Calculate count from percentage
+                    count = round(estimated_units * percentage / 100)
+                    
+                    # Extract area range
+                    area_config = ut.get("area", {})
+                    if isinstance(area_config, dict):
+                        min_area = area_config.get("min", 50)
+                        max_area = area_config.get("max", 100)
+                    else:
+                        min_area = ut.get("min_area", 50)
+                        max_area = ut.get("max_area", 100)
+                    
+                    # Extract dimensions (NEW)
+                    dimensions = ut.get("dimensions", {})
+                    
+                    for i in range(count):
+                        target_area = np.random.uniform(min_area, max_area)
+                        unit_specs.append({
+                            "type": unit_type,
+                            "target_area": target_area,
+                            "min_area": min_area,
+                            "max_area": max_area,
+                            "priority": priority,
+                            "dimensions": dimensions
+                        })
+                
+                # Sort by priority (lower number = higher priority)
+                unit_specs.sort(key=lambda x: x["priority"])
+                
+            else:
+                # OLD: target_count strategy (backward compatibility)
+                unit_specs = []
+                for ut in unit_types_config:
+                    unit_type = ut.get("type", "Studio")
+                    count = ut.get("count", 0)
+                    priority = ut.get("priority", 1)
+                    
+                    # Extract area range
+                    area_config = ut.get("area", {})
+                    if isinstance(area_config, dict):
+                        min_area = area_config.get("min", 50)
+                        max_area = area_config.get("max", 100)
+                    else:
+                        min_area = ut.get("min_area", 50)
+                        max_area = ut.get("max_area", 100)
+                    
+                    dimensions = ut.get("dimensions", {})
+                    
+                    for i in range(count):
+                        target_area = np.random.uniform(min_area, max_area)
+                        unit_specs.append({
+                            "type": unit_type,
+                            "target_area": target_area,
+                            "min_area": min_area,
+                            "max_area": max_area,
+                            "priority": priority,
+                            "dimensions": dimensions
+                        })
             
             logger.info(f"Planning layout for {len(unit_specs)} units")
             
@@ -306,112 +524,66 @@ class ProfessionalLayoutEngine:
             
             logger.info(f"Available area has {len(available_regions)} regions")
             
-            placed_units = []
+            # ===== NEW: Multi-Pass Placement Strategy =====
+            # Pass 1: Strict (perimeter + close to corridor)
+            # Pass 2: Relaxed (near perimeter OR close to corridor)
+            # Pass 3: Flexible (any location, prioritize filling space)
             
-            # Try to place each unit
-            for spec in unit_specs:
-                target_area = spec["target_area"]
-                unit_type = spec["type"]
-                
-                # Calculate unit dimensions
-                # Standard residential unit: width/depth ratio around 1.2-1.4
-                unit_width = np.sqrt(target_area * 1.3)
-                unit_depth = target_area / unit_width
-                
-                best_unit = None
-                best_score = -1
-                
-                # Try each available region
-                for region in available_regions:
-                    if region.is_empty or region.area < target_area * 0.5:
-                        continue
-                    
-                    reg_bounds = region.bounds
-                    reg_minx, reg_miny, reg_maxx, reg_maxy = reg_bounds
-                    
-                    # Grid sampling with FINE spacing for better coverage
-                    x_step = max(0.3, unit_width * 0.2)  # Fine grid
-                    y_step = max(0.3, unit_depth * 0.2)
-                    
-                    x_positions = np.arange(reg_minx, reg_maxx - unit_width * 0.3, x_step)
-                    y_positions = np.arange(reg_miny, reg_maxy - unit_depth * 0.3, y_step)
-                    
-                    # Increase attempts for better placement
-                    max_attempts = min(len(x_positions) * len(y_positions), 500)
-                    attempts = 0
-                    
-                    for x in x_positions:
-                        for y in y_positions:
-                            if attempts >= max_attempts:
-                                break
-                            attempts += 1
-                            
-                            # Create unit box
-                            unit_poly = box(x, y, x + unit_width, y + unit_depth)
-                            
-                            # Clip to region
-                            unit_clipped = unit_poly.intersection(region)
-                            
-                            # Must meet minimum area (relaxed to 50%)
-                            if unit_clipped.is_empty or unit_clipped.area < target_area * 0.50:
-                                continue
-                            
-                            # Check perimeter access (PRIORITY - windows)
-                            perimeter_contact = unit_clipped.boundary.intersection(self.boundary.boundary)
-                            perimeter_length = perimeter_contact.length if hasattr(perimeter_contact, 'length') else 0
-                            
-                            # Require minimum 2.5m perimeter (relaxed from 3m)
-                            if perimeter_length < 2.5:
-                                continue
-                            
-                            # Check corridor proximity (relaxed - just needs to be near)
-                            # Use distance instead of intersection
-                            try:
-                                corridor_distance = unit_clipped.distance(corridor_union)
-                            except:
-                                corridor_distance = 999  # Very far if error
-                            
-                            # Units within 3m of corridor are accessible (door can reach)
-                            if corridor_distance > 3.0:
-                                continue
-                            
-                            # Score this placement
-                            area_match = min(unit_clipped.area / target_area, target_area / unit_clipped.area)
-                            perimeter_score = min(perimeter_length / 4.0, 1.0)
-                            corridor_score = max(0, 1.0 - corridor_distance / 3.0)  # Closer is better
-                            
-                            # Weighted score (favor perimeter and good area match)
-                            score = area_match * 8 + perimeter_score * 5 + corridor_score * 3
-                            
-                            if score > best_score:
-                                best_unit = unit_clipped
-                                best_score = score
-                        
-                        if attempts >= max_attempts:
-                            break
-                
-                # Place best unit if found
-                if best_unit and best_score > 0:
-                    placed_units.append({
-                        "type": unit_type,
-                        "polygon": best_unit,
-                        "area": best_unit.area
-                    })
-                    
-                    # Remove from available regions
-                    buffer_dist = 0.05  # Smaller buffer for better packing
-                    new_regions = []
-                    for region in available_regions:
-                        remaining = region.difference(best_unit.buffer(buffer_dist))
-                        if not remaining.is_empty:
-                            if isinstance(remaining, MultiPolygon):
-                                new_regions.extend(list(remaining.geoms))
-                            else:
-                                new_regions.append(remaining)
-                    available_regions = new_regions
-                    available_regions.sort(key=lambda p: p.area, reverse=True)
-                else:
-                    logger.debug(f"Could not place {unit_type} unit ({target_area:.1f}m²)")
+            placed_units = []
+            remaining_specs = list(unit_specs)
+            
+            # PASS 1: Strict placement (perimeter + corridor)
+            logger.info("Pass 1: Strict placement (perimeter + corridor access)...")
+            remaining_specs = self._place_units_pass(
+                remaining_specs,
+                available_regions,
+                corridor_union,
+                placed_units,
+                pass_config={
+                    "name": "strict",
+                    "min_perimeter": 1.8,      # Relaxed from 2.5m
+                    "max_corridor_distance": 3.0,
+                    "min_area_match": 0.60,
+                    "max_attempts": 500
+                }
+            )
+            
+            # PASS 2: Relaxed placement (near perimeter OR corridor)
+            if remaining_specs:
+                logger.info(f"Pass 2: Relaxed placement ({len(remaining_specs)} remaining)...")
+                remaining_specs = self._place_units_pass(
+                    remaining_specs,
+                    available_regions,
+                    corridor_union,
+                    placed_units,
+                    pass_config={
+                        "name": "relaxed",
+                        "min_perimeter": 1.0,      # More relaxed
+                        "max_corridor_distance": 6.0,  # Further from corridor OK
+                        "min_area_match": 0.50,
+                        "max_attempts": 500
+                    }
+                )
+            
+            # PASS 3: Flexible placement (fill remaining space)
+            if remaining_specs:
+                logger.info(f"Pass 3: Flexible placement ({len(remaining_specs)} remaining)...")
+                remaining_specs = self._place_units_pass(
+                    remaining_specs,
+                    available_regions,
+                    corridor_union,
+                    placed_units,
+                    pass_config={
+                        "name": "flexible",
+                        "min_perimeter": 0.0,      # No perimeter requirement
+                        "max_corridor_distance": 10.0,  # Very relaxed
+                        "min_area_match": 0.40,    # Accept smaller units
+                        "max_attempts": 600
+                    }
+                )
+            
+            if remaining_specs:
+                logger.warning(f"Could not place {len(remaining_specs)} units after 3 passes")
             
             # Create final units list with proper IDs
             for i, unit_data in enumerate(placed_units, 1):

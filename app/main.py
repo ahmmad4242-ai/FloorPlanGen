@@ -328,16 +328,18 @@ def generate_single_variant(
             corridor_width=corridor_width
         )
         
-        # Prepare unit types for layout engine - support both "units" and "unit_types"
+        # Prepare unit types for layout engine - support V2 (percentages) and V1 (counts)
         units_config = constraints.get("units") or constraints.get("unit_types", [])
         unit_types_for_layout = []
         
         for uc in units_config:
-            # Support both structures: {"type": "1BR", "count": 2, "min_area": 55, "max_area": 70}
-            # and {"net_area_m2": {"min": 55, "max": 70}, "count": 2}
+            # Support both V2 and V1 structures
             unit_type = uc.get("type", "Studio")
             count = uc.get("count", 0)
+            percentage = uc.get("percentage", 0)
+            priority = uc.get("priority", 1)
             
+            # Extract area range
             if "min_area" in uc and "max_area" in uc:
                 min_area = uc.get("min_area", 50)
                 max_area = uc.get("max_area", 100)
@@ -346,21 +348,43 @@ def generate_single_variant(
                 min_area = area_range.get("min", 50)
                 max_area = area_range.get("max", 100)
             
-            # Add to layout engine format
-            unit_types_for_layout.append({
+            target_area = (min_area + max_area) / 2
+            
+            # Build V2 format for layout engine
+            unit_spec = {
                 "type": unit_type,
-                "count": count,
-                "min_area": min_area,
-                "max_area": max_area
-            })
+                "priority": priority,
+                "area": {  # ✅ NEW: Nested area object
+                    "min": min_area,
+                    "max": max_area,
+                    "target": target_area
+                }
+            }
+            
+            # Add percentage OR count (V2 vs V1)
+            if percentage > 0:
+                unit_spec["percentage"] = percentage
+            elif count > 0:
+                unit_spec["count"] = count
+            else:
+                unit_spec["count"] = 1  # Default
+            
+            unit_types_for_layout.append(unit_spec)
         
-        logger.info(f"Planning units: {unit_types_for_layout}")
+        logger.info(f"Planning units (V2 format): {unit_types_for_layout}")
         
-        # NEW: Layout units with PROPER corridor access and perimeter windows
+        # NEW V2: Layout units with DYNAMIC generation (percentages support)
+        unit_constraints = {
+            "generation_strategy": constraints.get("generation_strategy", "fill_available"),
+            "units": unit_types_for_layout,
+            "total_units": constraints.get("total_units", {}),
+            "distribution_strategy": constraints.get("distribution_strategy", {})
+        }
+        
         units = layout_engine.layout_units_with_corridor_access(
             core=core,
             corridors=corridors,
-            unit_types=unit_types_for_layout
+            unit_constraints=unit_constraints
         )
         
         # Calculate metrics (units area, corridor area, efficiency)
