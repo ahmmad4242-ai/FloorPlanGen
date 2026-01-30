@@ -410,13 +410,23 @@ class ProfessionalLayoutEngine:
                         unit_poly = box(x, y, x + unit_width, y + unit_depth)
                         unit_clipped = unit_poly.intersection(region)
                         
-                        # Check minimum area
-                        if unit_clipped.is_empty or unit_clipped.area < target_area * pass_config["min_area_match"]:
+                        # ✅ V2.4.1: CRITICAL FIX - Check if unit_clipped is a valid Polygon
+                        if unit_clipped.is_empty or not isinstance(unit_clipped, Polygon):
                             continue
                         
-                        # Check perimeter access
-                        perimeter_contact = unit_clipped.boundary.intersection(self.boundary.boundary)
-                        perimeter_length = perimeter_contact.length if hasattr(perimeter_contact, 'length') else 0
+                        # Check minimum area
+                        if unit_clipped.area < target_area * pass_config["min_area_match"]:
+                            continue
+                        
+                        # ✅ V2.4.1: Safe perimeter access check
+                        try:
+                            if unit_clipped.boundary is None:
+                                continue
+                            perimeter_contact = unit_clipped.boundary.intersection(self.boundary.boundary)
+                            perimeter_length = perimeter_contact.length if hasattr(perimeter_contact, 'length') else 0
+                        except Exception as e:
+                            logger.debug(f"Perimeter check failed: {e}")
+                            continue
                         
                         # Apply perimeter requirement from config
                         if perimeter_length < pass_config["min_perimeter"]:
@@ -431,17 +441,23 @@ class ProfessionalLayoutEngine:
                             
                             # NEW V2.2: Check corridor-facing width (minimum 2.5m for proper entrance)
                             min_facing_width = pass_config.get("min_corridor_facing_width", 2.5)
-                            corridor_facing_edge = unit_clipped.boundary.intersection(corridor_union.buffer(0.1))
                             
-                            if hasattr(corridor_facing_edge, 'length'):
-                                facing_width = corridor_facing_edge.length
-                            else:
+                            # ✅ V2.4.1: Safe boundary check
+                            if unit_clipped.boundary is None:
                                 facing_width = 0
+                            else:
+                                corridor_facing_edge = unit_clipped.boundary.intersection(corridor_union.buffer(0.1))
+                                
+                                if hasattr(corridor_facing_edge, 'length'):
+                                    facing_width = corridor_facing_edge.length
+                                else:
+                                    facing_width = 0
                             
                             # Skip if facing width too narrow (can't fit door properly)
                             if facing_width > 0 and facing_width < min_facing_width:
                                 continue
-                        except:
+                        except Exception as e:
+                            logger.debug(f"Corridor check failed: {e}")
                             corridor_distance = 999
                             has_corridor_contact = False
                         
