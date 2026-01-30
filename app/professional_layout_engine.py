@@ -661,15 +661,18 @@ class ProfessionalLayoutEngine:
                                          corridors: List[Polygon],
                                          unit_constraints: Dict) -> List[Dict]:
         """
-        Layout units DYNAMICALLY based on percentages (V2).
+        ✅ V3.0: Layout units using ROW-BASED algorithm for 95%+ coverage.
         
-        NEW: Supports two strategies:
-        1. "fill_available": Fill all available space based on percentages
-        2. "target_count": Place specific count (old behavior)
+        NEW V3.0: Uses row-based placement (no region fragmentation!)
+        
+        Supports two strategies:
+        1. "fill_available": Fill all available space based on percentages (V3.0 default)
+        2. "target_count": Place specific count (legacy V2)
         
         Unit constraints format V2:
         {
             "generation_strategy": "fill_available" | "target_count",
+            "use_v3_row_based": True | False,  # NEW V3.0!
             "units": [
                 {
                     "type": "Studio",
@@ -688,6 +691,135 @@ class ProfessionalLayoutEngine:
         }
         """
         units = []
+        
+        # ✅ V3.0: Check if row-based layout should be used
+        use_v3_row_based = unit_constraints.get("use_v3_row_based", True)  # Default: use V3.0!
+        
+        # ✅ V3.0: ROW-BASED LAYOUT PATH
+        if use_v3_row_based:
+            logger.info("🚀 Using V3.0 Row-Based Layout Algorithm")
+            
+            try:
+                # Import V3.0 module
+                from .row_based_layout_v3 import RowBasedLayoutV3
+                
+                # Calculate available area
+                occupied = unary_union([core] + corridors)
+                available = self.usable_area.difference(occupied)
+                
+                if available.is_empty:
+                    logger.warning("No available area for units after corridors")
+                    return []
+                
+                logger.info(f"Available for units: {available.area:.2f} m²")
+                
+                # Extract constraints
+                generation_strategy = unit_constraints.get("generation_strategy", "fill_available")
+                unit_types_config = unit_constraints.get("units", [])
+                total_units_config = unit_constraints.get("total_units", {})
+                
+                # ===== Estimate total units dynamically =====
+                if generation_strategy == "fill_available":
+                    # Calculate average unit area
+                    avg_area = 0
+                    total_percentage = 0
+                    for ut in unit_types_config:
+                        area_config = ut.get("area", {})
+                        if isinstance(area_config, dict):
+                            min_area = area_config.get("min", 50)
+                            max_area = area_config.get("max", 100)
+                            target_area = area_config.get("target", (min_area + max_area) / 2)
+                        else:
+                            target_area = 60  # default
+                        
+                        percentage = ut.get("percentage", 0)
+                        avg_area += target_area * percentage / 100
+                        total_percentage += percentage
+                    
+                    if total_percentage > 0:
+                        avg_area = avg_area / (total_percentage / 100)
+                    else:
+                        avg_area = 60  # default
+                    
+                    # ✅ V3.0: Use 95% efficiency target!
+                    estimated_units = int(available.area / avg_area * 0.95)
+                    
+                    # Apply bounds
+                    min_units = total_units_config.get("min", 5)
+                    max_units = total_units_config.get("max", 100)
+                    estimated_units = max(min_units, min(estimated_units, max_units))
+                    
+                    logger.info(f"✅ V3.0: Estimated {estimated_units} units (95% target efficiency)")
+                    
+                    # Create unit specs
+                    unit_specs = []
+                    for ut in unit_types_config:
+                        unit_type = ut.get("type", "Studio")
+                        percentage = ut.get("percentage", 0)
+                        priority = ut.get("priority", 1)
+                        
+                        count = int(estimated_units * percentage / 100)
+                        
+                        area_config = ut.get("area", {})
+                        if isinstance(area_config, dict):
+                            target_area = area_config.get("target", 60)
+                        else:
+                            target_area = area_config
+                        
+                        for _ in range(count):
+                            unit_specs.append({
+                                "type": unit_type,
+                                "target_area": target_area,
+                                "priority": priority
+                            })
+                    
+                    logger.info(f"✅ V3.0: Created {len(unit_specs)} unit specs")
+                
+                else:  # target_count
+                    unit_specs = []
+                    for ut in unit_types_config:
+                        unit_type = ut.get("type", "Studio")
+                        count = ut.get("count", 0)
+                        priority = ut.get("priority", 1)
+                        
+                        area_config = ut.get("area", {})
+                        target_area = area_config.get("target", 60) if isinstance(area_config, dict) else area_config
+                        
+                        for _ in range(count):
+                            unit_specs.append({
+                                "type": unit_type,
+                                "target_area": target_area,
+                                "priority": priority
+                            })
+                
+                # Initialize V3.0
+                v3_engine = RowBasedLayoutV3(self.boundary, corridors, core)
+                
+                # Place units
+                placed_units = v3_engine.layout_units_row_based(unit_specs)
+                
+                # Convert format
+                for i, unit_data in enumerate(placed_units, 1):
+                    units.append({
+                        "id": f"unit_{i}",
+                        "type": unit_data["type"],
+                        "polygon": unit_data["polygon"],
+                        "area": unit_data["area"],
+                        "centroid": unit_data["polygon"].centroid
+                    })
+                
+                logger.info(f"✅ V3.0: Placed {len(units)} units successfully")
+                
+                return units
+                
+            except Exception as e:
+                logger.error(f"❌ V3.0 failed: {e}")
+                logger.warning("⚠️  Falling back to V2.x...")
+                use_v3_row_based = False  # Disable for fallback
+        
+        # ===== V2.x LEGACY PATH (Fallback) =====
+        if not use_v3_row_based:
+            logger.info("Using V2.x Region-Based Layout")
         
         try:
             # Calculate available area (exclude core + corridors)
