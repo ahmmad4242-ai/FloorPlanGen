@@ -75,12 +75,135 @@ class ProfessionalLayoutEngine:
             logger.error(f"Failed to calculate usable area: {e}")
             return self.boundary
     
+    def place_cores(self,
+                    core_count: int = 1,
+                    core_area: float = 40.0,
+                    preferred_location: str = "auto") -> List[Polygon]:
+        """
+        ✅ V2.5.0: Place multiple cores in building (Multi-Core Support).
+        
+        Supports:
+        - core_count = 1: Single core at center (default)
+        - core_count = 2: Dual cores at both ends (for elongated buildings)
+        - core_count = 4: Quad cores at corners (for very large buildings)
+        
+        Args:
+            core_count: Number of cores (1, 2, or 4)
+            core_area: Area per core in m² (default: 40)
+            preferred_location: "auto" or specific location
+        
+        Returns:
+            List of core polygons
+        """
+        cores = []
+        
+        centroid = self.boundary.centroid
+        bounds = self.boundary.bounds
+        minx, miny, maxx, maxy = bounds
+        width = maxx - minx
+        height = maxy - miny
+        
+        try:
+            if core_count == 1:
+                # Single core (original behavior)
+                core = self.place_core(core_area, preferred_location if preferred_location != "auto" else "center")
+                if core:
+                    cores.append(core)
+            
+            elif core_count == 2:
+                # Dual cores at both ends
+                logger.info("Placing dual cores...")
+                # Determine orientation
+                if width > height * 1.5:
+                    # Horizontal: left and right
+                    positions = [
+                        ("west", Point(minx + width * 0.20, centroid.y)),
+                        ("east", Point(maxx - width * 0.20, centroid.y))
+                    ]
+                else:
+                    # Vertical: top and bottom
+                    positions = [
+                        ("south", Point(centroid.x, miny + height * 0.20)),
+                        ("north", Point(centroid.x, maxy - height * 0.20))
+                    ]
+                
+                for loc, center in positions:
+                    core = self._place_single_core(center, core_area)
+                    if core:
+                        cores.append(core)
+            
+            elif core_count == 4:
+                # Quad cores at four corners
+                logger.info("Placing quad cores...")
+                positions = [
+                    Point(minx + width * 0.25, miny + height * 0.25),  # SW
+                    Point(maxx - width * 0.25, miny + height * 0.25),  # SE
+                    Point(minx + width * 0.25, maxy - height * 0.25),  # NW
+                    Point(maxx - width * 0.25, maxy - height * 0.25),  # NE
+                ]
+                
+                for center in positions:
+                    core = self._place_single_core(center, core_area)
+                    if core:
+                        cores.append(core)
+            
+            else:
+                logger.warning(f"Invalid core_count: {core_count}. Using single core.")
+                core = self.place_core(core_area, "center")
+                if core:
+                    cores.append(core)
+            
+            logger.info(f"Placed {len(cores)} core(s) with total area {sum(c.area for c in cores):.2f} m²")
+            return cores
+            
+        except Exception as e:
+            logger.error(f"Failed to place cores: {e}")
+            # Fallback to single core
+            core = self.place_core(core_area, "center")
+            return [core] if core else []
+    
+    def _place_single_core(self, center: Point, core_area: float) -> Optional[Polygon]:
+        """
+        Helper function to place a single core at specified center.
+        
+        Args:
+            center: Center point for the core
+            core_area: Area of the core in m²
+        
+        Returns:
+            Core polygon or None
+        """
+        try:
+            # Calculate core dimensions (square-ish)
+            core_width = np.sqrt(core_area * 0.9)
+            core_depth = core_area / core_width
+            
+            # Create core box
+            core = box(
+                center.x - core_width / 2,
+                center.y - core_depth / 2,
+                center.x + core_width / 2,
+                center.y + core_depth / 2
+            )
+            
+            # Ensure within usable area
+            if not self.usable_area.contains(core):
+                core = core.intersection(self.usable_area)
+            
+            return core if core.area > core_area * 0.5 else None
+            
+        except Exception as e:
+            logger.error(f"Failed to place single core: {e}")
+            return None
+    
     def place_core(self,
                    core_area: float,
                    preferred_location: str = "center") -> Optional[Polygon]:
         """
         Place core (elevators, stairs, services).
         Core should be centrally located for optimal circulation.
+        
+        NOTE: For multi-core support, use place_cores() instead.
         """
         try:
             centroid = self.boundary.centroid
@@ -725,7 +848,7 @@ class ProfessionalLayoutEngine:
                     "min_perimeter": 0.8,      # One facade (0.8m)
                     "max_corridor_distance": 0.5,  # ✅ V2.4.3: Slightly relaxed 30cm → 50cm
                     "min_corridor_facing_width": 2.5,  # Min 2.5m facing width
-                    "min_area_match": 0.60,
+                    "min_area_match": 0.50,  # ✅ V2.5.1: Relaxed 60% → 50%
                     "max_attempts": 300  # Fast placement for direct access
                 }
             )
@@ -743,7 +866,7 @@ class ProfessionalLayoutEngine:
                         "min_perimeter": 0.0,      # ✅ V2.4.3: Remove perimeter requirement
                         "max_corridor_distance": 5.0,  # ✅ V2.4.3: CRITICAL FIX: 1m → 5m
                         "min_corridor_facing_width": 1.0,  # ✅ V2.4.3: Relaxed 2.0m → 1.0m
-                        "min_area_match": 0.50,
+                        "min_area_match": 0.35,  # ✅ V2.5.1: CRITICAL 50% → 35%
                         "max_attempts": 500  # ✅ V2.4.3: Increased for better coverage
                     }
                 )
@@ -761,8 +884,8 @@ class ProfessionalLayoutEngine:
                         "min_perimeter": 0.0,      # No perimeter requirement
                         "max_corridor_distance": 15.0,  # ✅ V2.4.3: CRITICAL FIX: 2.5m → 15m
                         "min_corridor_facing_width": 0.0,  # ✅ V2.4.3: No requirement
-                        "min_area_match": 0.40,    # Accept smaller units
-                        "max_attempts": 800  # ✅ V2.4.3: Significantly increased
+                        "min_area_match": 0.25,    # ✅ V2.5.1: CRITICAL 40% → 25% (fill ALL space)
+                        "max_attempts": 1500  # ✅ V2.5.1: CRITICAL 800 → 1500 (maximum filling)
                     }
                 )
             

@@ -158,6 +158,73 @@ class CorridorPatternGenerator:
         else:
             return connector.intersection(self.boundary)
     
+    def _create_grid_pattern(self, spacing: float = None) -> List[Polygon]:
+        """
+        ✅ V2.5.0: Create GRID pattern with parallel horizontal and vertical corridors.
+        
+        Best for: Large spaces (>2000 m²)
+        Coverage: 95%+
+        
+        Grid pattern creates a network of intersecting corridors that covers
+        the entire building, ensuring every unit is within walking distance.
+        
+        Args:
+            spacing: Distance between parallel corridors (default: auto-calculated)
+        
+        Returns:
+            List of corridor polygons forming a grid
+        """
+        if spacing is None:
+            # Auto-calculate optimal spacing
+            # Target: 10-12% corridor coverage (not 38%!)
+            # Formula: fewer corridors, more space for units
+            spacing = min(self.width, self.height) / 2.5  # Reduced from 3.5
+            spacing = max(15.0, min(spacing, 30.0))  # Increased min from 10 to 15
+        
+        logger.info(f"Creating grid pattern with {spacing:.1f}m spacing")
+        
+        corridors = []
+        
+        # Horizontal corridors (2-3 main corridors, not 5-6)
+        num_h_corridors = max(2, min(3, int(self.height / spacing)))
+        for i in range(num_h_corridors):
+            if num_h_corridors == 1:
+                y = self.miny + self.height / 2
+            else:
+                y = self.miny + i * (self.height / (num_h_corridors - 1))
+            
+            corridor = box(
+                self.minx,
+                y - self.corridor_width / 2,
+                self.maxx,
+                y + self.corridor_width / 2
+            )
+            clipped = corridor.intersection(self.boundary)
+            if not clipped.is_empty and clipped.area > 1.0:
+                corridors.append(clipped)
+        
+        # Vertical corridors (2-3 main corridors, not 5-6)
+        num_v_corridors = max(2, min(3, int(self.width / spacing)))
+        for i in range(num_v_corridors):
+            if num_v_corridors == 1:
+                x = self.minx + self.width / 2
+            else:
+                x = self.minx + i * (self.width / (num_v_corridors - 1))
+            
+            corridor = box(
+                x - self.corridor_width / 2,
+                self.miny,
+                x + self.corridor_width / 2,
+                self.maxy
+            )
+            clipped = corridor.intersection(self.boundary)
+            if not clipped.is_empty and clipped.area > 1.0:
+                corridors.append(clipped)
+        
+        logger.info(f"Grid: {num_h_corridors} horizontal + {num_v_corridors} vertical = {len(corridors)} total")
+        
+        return corridors
+    
     def select_pattern(self, pattern: str = "auto") -> str:
         """
         Auto-select best corridor pattern based on building shape.
@@ -175,20 +242,21 @@ class CorridorPatternGenerator:
         
         logger.info(f"Auto-selecting pattern: aspect={aspect_ratio:.2f}, area={self.area:.0f}m²")
         
-        # Decision logic
-        if aspect_ratio > 2.5 or aspect_ratio < 0.4:
+        # ✅ V2.5.1: Optimized decision logic
+        # For large spaces, use H pattern (better than grid)
+        if self.area > 2500:
+            return "H"  # H-pattern for large spaces (better coverage/corridor ratio)
+        elif aspect_ratio > 2.5 or aspect_ratio < 0.4:
             return "L"  # Very elongated
         elif 0.85 <= aspect_ratio <= 1.15:
-            if self.area > 3000:
-                return "H"  # Large square
+            if self.area > 2000:
+                return "+"  # Medium-large square
             else:
-                return "+"  # Medium square
-        elif self.area > 5000:
-            return "H"  # Very large
-        elif self.area > 2500:
+                return "T"  # Medium square
+        elif self.area > 1500:
             return "U"  # Large
         else:
-            return "T"  # Medium (default)
+            return "T"  # Small (default)
     
     def generate(self, pattern: str = "auto", usable_area: Polygon = None) -> List[Polygon]:
         """
@@ -205,7 +273,9 @@ class CorridorPatternGenerator:
         logger.info(f"Generating {selected}-pattern corridors")
         
         # Generate pattern
-        if selected == "U":
+        if selected == "grid":  # ✅ V2.5.0: NEW Grid pattern
+            corridors = self._create_grid_pattern()
+        elif selected == "U":
             corridors = self._create_U_pattern()
         elif selected == "L":
             corridors = self._create_L_pattern()
