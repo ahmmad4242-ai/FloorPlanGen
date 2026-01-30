@@ -346,7 +346,10 @@ npx wrangler pages deploy dist --project-name webapp
 **Status**: Production  
 **License**: MIT  
 
-**Backup Archive**: https://www.genspark.ai/api/files/s/n93vZ1pl (87MB)
+**Links**:
+- **GitHub**: https://github.com/ahmmad4242-ai/FloorPlanGen
+- **Backup Archive**: https://www.genspark.ai/api/files/s/KQ3BLZ1X (87MB)
+- **Release Date**: 2026-01-30
 
 ---
 
