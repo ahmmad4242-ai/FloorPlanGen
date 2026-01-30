@@ -390,9 +390,9 @@ class ProfessionalLayoutEngine:
                 reg_bounds = region.bounds
                 reg_minx, reg_miny, reg_maxx, reg_maxy = reg_bounds
                 
-                # Fine grid sampling
-                x_step = max(0.2, unit_width * 0.15)
-                y_step = max(0.2, unit_depth * 0.15)
+                # ✅ V2.4.2: Coarser grid sampling for speed (was 0.15, now 0.25)
+                x_step = max(0.5, unit_width * 0.25)
+                y_step = max(0.5, unit_depth * 0.25)
                 
                 x_positions = np.arange(reg_minx, reg_maxx - unit_width * 0.2, x_step)
                 y_positions = np.arange(reg_miny, reg_maxy - unit_depth * 0.2, y_step)
@@ -702,7 +702,7 @@ class ProfessionalLayoutEngine:
                     "max_corridor_distance": 0.3,  # CRITICAL: Direct touch (30cm max)
                     "min_corridor_facing_width": 2.5,  # NEW V2.2: Min 2.5m facing width
                     "min_area_match": 0.60,
-                    "max_attempts": 800  # ✅ V2.4: Increased from 500 to 800
+                    "max_attempts": 300  # ✅ V2.4.2: Reduced to 300 for speed (was 800)
                 }
             )
             
@@ -720,7 +720,7 @@ class ProfessionalLayoutEngine:
                         "max_corridor_distance": 1.0,  # Close to corridor (1m max)
                         "min_corridor_facing_width": 2.0,  # V2.2: Relaxed to 2.0m
                         "min_area_match": 0.50,
-                        "max_attempts": 500
+                        "max_attempts": 200  # ✅ V2.4.2: Reduced to 200 for speed  # ✅ V2.4.2: Reduced to 300 for speed
                     }
                 )
             
