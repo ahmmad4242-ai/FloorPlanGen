@@ -14,6 +14,12 @@
 
 ### ✅ Core Capabilities
 
+**⚠️ IMPORTANT**: Parameters go inside `constraints.architectural_constraints`:
+- `corridor_pattern` → `constraints.architectural_constraints.circulation.corridor_pattern`
+- `core_count` → `constraints.architectural_constraints.core.core_count`
+
+See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for full examples.
+
 1. **Multi-Core Support**
    - 1 Core: Single central core (default)
    - 2 Cores: Two cores at optimal positions
@@ -80,7 +86,73 @@ Typical Range:   8-15 seconds
 
 **Endpoint**: `POST /generate`
 
+**⚠️ IMPORTANT**: `corridor_pattern` and `core_count` go inside `constraints.architectural_constraints`
+
 **Request Example**:
+```json
+{
+  "project_id": "test-2026-01-30",
+  "dxf_url": "https://example.com/floor.dxf",
+  "boundary_layer": "BOUNDARY",
+  "variant_count": 5,
+  "constraints": {
+    "architectural_constraints": {
+      "core": {
+        "core_count": 1,
+        "elevators": 2,
+        "stairs": 2,
+        "net_area_m2": {"min": 30, "target": 40, "max": 50}
+      },
+      "circulation": {
+        "corridor_pattern": "grid",
+        "corridor_width_m": {"min": 2.0, "target": 2.2, "max": 2.5},
+        "corridor_area_ratio": {"min": 0.08, "target": 0.10, "max": 0.15}
+      },
+      "units": [
+        {
+          "type": "Studio",
+          "percentage": 20,
+          "net_area_m2": {"min": 25, "target": 30, "max": 35}
+        },
+        {
+          "type": "1BR",
+          "percentage": 40,
+          "net_area_m2": {"min": 45, "target": 55, "max": 65}
+        },
+        {
+          "type": "2BR",
+          "percentage": 30,
+          "net_area_m2": {"min": 65, "target": 75, "max": 85}
+        },
+        {
+          "type": "3BR",
+          "percentage": 10,
+          "net_area_m2": {"min": 85, "target": 100, "max": 115}
+        }
+      ]
+    }
+  }
+}
+```
+
+**Corridor Pattern Options**:
+- `"grid"` - 2×2 or 3×3 intersecting corridors (12-16% area)
+- `"H"` - Double-loaded with cross (9-11% area) ⭐ Recommended for large buildings
+- `"U"` - 3-sided perimeter (10-12% area)
+- `"L"` - Two perpendicular corridors (8-10% area)
+- `"+"` - 4-directional from center (9-11% area)
+- `"T"` - Main spine + branch (8-10% area)
+- `"line"` - Single straight corridor (6-8% area)
+- `"auto"` - Intelligent selection (default)
+
+**Core Count Options**:
+- `1` - Single central core (default, for buildings < 2000 m²)
+- `2` - Dual cores at both ends (for elongated buildings 2000-4000 m²)
+- `4` - Quad cores at corners (for large buildings > 4000 m²)
+
+**📖 Full API Documentation**: See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md)
+
+### Old Request Format (DEPRECATED)
 ```json
 {
   "project_id": "test-2026-01-30",
@@ -91,7 +163,13 @@ Typical Range:   8-15 seconds
   "core_count": 1,
   "unit_constraints": {
     "generation_strategy": "fill_available",
-    "units": [
+    "units": [...]
+  }
+}
+```
+⚠️ This format is DEPRECATED. Use `architectural_constraints` instead.
+
+**Response Example**:
       {
         "type": "Studio",
         "percentage": 20,
@@ -120,36 +198,45 @@ Typical Range:   8-15 seconds
 **Response Example**:
 ```json
 {
-  "project_id": "test-2026-01-30",
-  "status": "success",
-  "generation_time_seconds": 9.8,
-  "core": {
-    "count": 1,
-    "total_area_m2": 40.0
-  },
-  "corridors": {
-    "pattern": "grid",
-    "segment_count": 3,
-    "total_area_m2": 286.3,
-    "area_ratio": 9.5
-  },
-  "units": [
+  "job_id": "uuid-abc123",
+  "status": "completed",
+  "message": "Generated 5 variants successfully",
+  "variants": [
     {
-      "id": "unit_1",
-      "type": "1BR",
-      "area_m2": 55.2,
-      "polygon": {...},
-      "centroid": [31.5, 24.0]
+      "variant_id": "uuid-variant-1",
+      "variant_number": 1,
+      "metrics": {
+        "total_area": 3024.0,
+        "core_area": 40.0,
+        "corridor_area": 286.3,
+        "units_area": 1684.1,
+        "efficiency": 0.665,
+        "corridor_ratio": 0.095,
+        "units_count": 38
+      },
+      "units_by_type": {
+        "Studio": 8,
+        "1BR": 15,
+        "2BR": 11,
+        "3BR": 4
+      },
+      "cores": [
+        {
+          "id": "core_1",
+          "area_m2": 40.0,
+          "centroid": [31.5, 24.0]
+        }
+      ]
+      },
+      "corridors": {
+        "pattern": "grid",
+        "segment_count": 3,
+        "total_area_m2": 286.3
+      },
+      "dxf_download_url": "/variant/uuid-variant-1/download",
+      "svg_preview_url": "/variant/uuid-variant-1/preview"
     }
-  ],
-  "metrics": {
-    "boundary_area_m2": 3024.0,
-    "total_used_m2": 2010.5,
-    "total_wasted_m2": 1013.5,
-    "coverage_percent": 66.5,
-    "efficiency": 0.665,
-    "units_count": 38
-  }
+  ]
 }
 ```
 
