@@ -320,10 +320,23 @@ def generate_single_variant(
             preferred_location = random.choice(core_locations)
             logger.info(f"Variant {variant_number}: Using core location '{preferred_location}'")
         
-        core = layout_engine.place_core(
-            core_area=core_area,
-            preferred_location=preferred_location
-        )
+        # ✅ V2.5.1: Multi-Core Support
+        core_count = core_config.get("core_count", 1)
+        if core_count in [1, 2, 4]:
+            cores = layout_engine.place_cores(
+                core_count=core_count,
+                core_area=core_area,
+                preferred_location="auto"  # Auto-place for multi-core
+            )
+            core = cores[0] if cores else None  # Use first core for corridor generation
+            logger.info(f"✅ Placed {core_count} core(s)")
+        else:
+            # Fallback to single core (backward compatibility)
+            core = layout_engine.place_core(
+                core_area=core_area,
+                preferred_location=preferred_location
+            )
+            cores = [core] if core else []
         
         # Create professional corridor network (spine + branches)
         circulation_config = arch_constraints.get("circulation") or constraints.get("circulation", {})
@@ -346,12 +359,15 @@ def generate_single_variant(
             layout_types = ["double_loaded", "single_loaded"]
             layout_type = random.choice(layout_types)
         
-        logger.info(f"Variant {variant_number}: corridor_width={corridor_width:.2f}m, layout={layout_type}")
+        # ✅ V2.5.1: Corridor Pattern Support
+        corridor_pattern = circulation_config.get("corridor_pattern", "auto")
+        logger.info(f"✅ Variant {variant_number}: corridor_width={corridor_width:.2f}m, pattern={corridor_pattern}")
         
         # NEW: Create VISIBLE corridor network (10-15% of floor area)
         corridors = layout_engine.create_visible_corridor_network(
             core=core,
-            corridor_width=corridor_width
+            corridor_width=corridor_width,
+            pattern=corridor_pattern  # ✅ V2.5.1: Support manual pattern selection
         )
         
         # Prepare unit types for layout engine - support V2 (percentages) and V1 (counts)
