@@ -434,8 +434,6 @@ npx wrangler pages deploy dist --project-name webapp
 **License**: MIT  
 
 **Links**:
-- **🌐 Live Demo**: https://floorplangen.pages.dev
-- **📦 Latest Deployment**: https://48446608.floorplangen.pages.dev
 - **GitHub**: https://github.com/ahmmad4242-ai/FloorPlanGen
 - **Backup Archive**: https://www.genspark.ai/api/files/s/KQ3BLZ1X (87MB)
 - **Release Date**: 2026-01-30

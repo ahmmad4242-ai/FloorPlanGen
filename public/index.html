@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FloorPlanGen V2.5.1 - مولد المخططات المعمارية</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4 space-x-reverse">
+                        <i class="fas fa-building text-4xl text-blue-600"></i>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">FloorPlanGen</h1>
+                            <p class="text-sm text-gray-500">مولد المخططات المعمارية V2.5.1</p>
+                        </div>
+                    </div>
+                    <div class="flex space-x-3 space-x-reverse">
+                        <a href="https://github.com/ahmmad4242-ai/FloorPlanGen" target="_blank" 
+                           class="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition">
+                            <i class="fab fa-github ml-2"></i>
+                            GitHub
+                        </a>
+                        <a href="/API_DOCUMENTATION.md" target="_blank"
+                           class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                            <i class="fas fa-book ml-2"></i>
+                            التوثيق
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Features Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center mb-4">
+                        <i class="fas fa-project-diagram text-3xl text-blue-600 ml-3"></i>
+                        <h3 class="text-lg font-semibold">أنماط الممرات</h3>
+                    </div>
+                    <p class="text-gray-600 text-sm mb-3">8 أنماط مختلفة للممرات</p>
+                    <ul class="text-sm text-gray-500 space-y-1">
+                        <li>• Grid (2×2, 3×3)</li>
+                        <li>• H, U, L Patterns</li>
+                        <li>• Plus (+), T, Line</li>
+                        <li>• Auto (اختيار ذكي)</li>
+                    </ul>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center mb-4">
+                        <i class="fas fa-cube text-3xl text-green-600 ml-3"></i>
+                        <h3 class="text-lg font-semibold">دعم الأنوية المتعددة</h3>
+                    </div>
+                    <p class="text-gray-600 text-sm mb-3">من 1 إلى 4 أنوية</p>
+                    <ul class="text-sm text-gray-500 space-y-1">
+                        <li>• نواة واحدة (مركزية)</li>
+                        <li>• نواتان (للمباني الطويلة)</li>
+                        <li>• 4 أنوية (للمباني الكبيرة)</li>
+                        <li>• وضع تلقائي</li>
+                    </ul>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center mb-4">
+                        <i class="fas fa-home text-3xl text-purple-600 ml-3"></i>
+                        <h3 class="text-lg font-semibold">وضع الوحدات الذكي</h3>
+                    </div>
+                    <p class="text-gray-600 text-sm mb-3">4 مراحل وضع متقدمة</p>
+                    <ul class="text-sm text-gray-500 space-y-1">
+                        <li>• Studio, 1BR, 2BR, 3BR</li>
+                        <li>• اتصال بالممرات</li>
+                        <li>• واجهات محيطية</li>
+                        <li>• توزيع متوازن</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Performance Stats -->
+            <div class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg p-8 text-white mb-8">
+                <h2 class="text-2xl font-bold mb-6 text-center">مقاييس الأداء V2.5.1</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div class="text-center">
+                        <div class="text-4xl font-bold mb-2">66-77%</div>
+                        <div class="text-sm opacity-90">التغطية</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-4xl font-bold mb-2">33-38</div>
+                        <div class="text-sm opacity-90">الوحدات</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-4xl font-bold mb-2">9-10%</div>
+                        <div class="text-sm opacity-90">نسبة الممرات</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-4xl font-bold mb-2">~10s</div>
+                        <div class="text-sm opacity-90">وقت التوليد</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Example -->
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-code text-blue-600 ml-3"></i>
+                    مثال استخدام الـ API
+                </h2>
+                <div class="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+                    <pre class="text-sm text-green-400 font-mono" dir="ltr"><code>POST /generate
+Content-Type: application/json
+
+{
+  "project_id": "test-001",
+  "dxf_url": "https://example.com/floor.dxf",
+  "variant_count": 5,
+  "constraints": {
+    "architectural_constraints": {
+      "core": {
+        "core_count": 2,
+        "elevators": 2,
+        "stairs": 2
+      },
+      "circulation": {
+        "corridor_pattern": "H",
+        "corridor_width_m": {"target": 2.2}
+      },
+      "units": [
+        {"type": "1BR", "percentage": 50},
+        {"type": "2BR", "percentage": 50}
+      ]
+    }
+  }
+}</code></pre>
+                </div>
+            </div>
+
+            <!-- Documentation Links -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold mb-3 flex items-center">
+                        <i class="fas fa-book-open text-blue-600 ml-3"></i>
+                        الوثائق الكاملة
+                    </h3>
+                    <ul class="space-y-2">
+                        <li>
+                            <a href="/README.md" class="text-blue-600 hover:underline flex items-center">
+                                <i class="fas fa-file-alt text-sm ml-2"></i>
+                                README.md - نظرة عامة
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/API_DOCUMENTATION.md" class="text-blue-600 hover:underline flex items-center">
+                                <i class="fas fa-file-code text-sm ml-2"></i>
+                                API_DOCUMENTATION.md - توثيق API
+                            </a>
+                        </li>
+                        <li>
+                            <a href="https://github.com/ahmmad4242-ai/FloorPlanGen" target="_blank" 
+                               class="text-blue-600 hover:underline flex items-center">
+                                <i class="fab fa-github text-sm ml-2"></i>
+                                GitHub Repository
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold mb-3 flex items-center">
+                        <i class="fas fa-download text-green-600 ml-3"></i>
+                        التحميل والنسخ الاحتياطية
+                    </h3>
+                    <ul class="space-y-2">
+                        <li>
+                            <a href="https://www.genspark.ai/api/files/s/KQ3BLZ1X" target="_blank"
+                               class="text-green-600 hover:underline flex items-center">
+                                <i class="fas fa-archive text-sm ml-2"></i>
+                                نسخة احتياطية كاملة (87 MB)
+                            </a>
+                        </li>
+                        <li>
+                            <span class="text-gray-600 flex items-center">
+                                <i class="fas fa-calendar text-sm ml-2"></i>
+                                تاريخ الإصدار: 2026-01-30
+                            </span>
+                        </li>
+                        <li>
+                            <span class="text-gray-600 flex items-center">
+                                <i class="fas fa-tag text-sm ml-2"></i>
+                                الإصدار: V2.5.1 Production
+                            </span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Footer Note -->
+            <div class="mt-8 text-center text-gray-500 text-sm">
+                <p>بني بـ ❤️ باستخدام Python, FastAPI, Shapely, و ezdxf</p>
+                <p class="mt-2">
+                    <span class="text-green-600 font-semibold">✅ مستقر وجاهز للاستخدام الإنتاجي</span>
+                </p>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
