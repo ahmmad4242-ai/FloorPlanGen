@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FloorPlanGen - تطبيق توليد المخططات</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3 space-x-reverse">
+                    <i class="fas fa-building text-3xl text-blue-600"></i>
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-900">FloorPlanGen</h1>
+                        <p class="text-xs text-gray-500">مولد المخططات المعمارية V2.5.1</p>
+                    </div>
+                </div>
+                <div class="flex space-x-2 space-x-reverse">
+                    <a href="/" class="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                        <i class="fas fa-home ml-1"></i>
+                        الرئيسية
+                    </a>
+                    <a href="https://github.com/ahmmad4242-ai/FloorPlanGen" target="_blank" 
+                       class="px-3 py-2 text-sm bg-gray-800 text-white rounded-lg hover:bg-gray-700">
+                        <i class="fab fa-github ml-1"></i>
+                        GitHub
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Right Panel: Configuration -->
+            <div class="lg:col-span-1 space-y-6">
+                
+                <!-- Step 1: Upload DXF -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-lg font-bold mb-4 flex items-center">
+                        <span class="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center ml-2 text-sm">1</span>
+                        رفع ملف DXF
+                    </h2>
+                    
+                    <div id="dropZone" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-500 transition cursor-pointer">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3"></i>
+                        <p class="text-sm text-gray-600 mb-2">اسحب وأفلت ملف DXF هنا</p>
+                        <p class="text-xs text-gray-400 mb-3">أو</p>
+                        <label class="px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 inline-block">
+                            <i class="fas fa-folder-open ml-2"></i>
+                            اختر ملف
+                            <input type="file" id="dxfFile" accept=".dxf" class="hidden">
+                        </label>
+                    </div>
+                    
+                    <div id="fileInfo" class="hidden mt-3 p-3 bg-blue-50 rounded-lg">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <i class="fas fa-file-alt text-blue-600 ml-2"></i>
+                                <span id="fileName" class="text-sm text-gray-700"></span>
+                            </div>
+                            <button onclick="clearFile()" class="text-red-600 hover:text-red-700">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            أو أدخل رابط DXF
+                        </label>
+                        <input type="url" id="dxfUrl" placeholder="https://example.com/floor.dxf"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                </div>
+
+                <!-- Step 2: Configuration -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-lg font-bold mb-4 flex items-center">
+                        <span class="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center ml-2 text-sm">2</span>
+                        إعدادات التوليد
+                    </h2>
+                    
+                    <!-- Corridor Pattern -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            نمط الممرات
+                            <i class="fas fa-info-circle text-gray-400 text-xs mr-1" title="اختر نمط الممرات المناسب"></i>
+                        </label>
+                        <select id="corridorPattern" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="auto">تلقائي (Auto)</option>
+                            <option value="grid">شبكة (Grid 2×2)</option>
+                            <option value="H">H-Pattern</option>
+                            <option value="U">U-Pattern</option>
+                            <option value="L">L-Pattern</option>
+                            <option value="+">Plus (+)</option>
+                            <option value="T">T-Pattern</option>
+                            <option value="line">خط مستقيم (Line)</option>
+                        </select>
+                    </div>
+
+                    <!-- Core Count -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            عدد الأنوية
+                            <i class="fas fa-info-circle text-gray-400 text-xs mr-1" title="عدد نوى المصاعد والدرج"></i>
+                        </label>
+                        <select id="coreCount" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="1">نواة واحدة (مركزية)</option>
+                            <option value="2">نواتان (للمباني الطويلة)</option>
+                            <option value="4">4 أنوية (للمباني الكبيرة)</option>
+                        </select>
+                    </div>
+
+                    <!-- Variant Count -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            عدد البدائل
+                            <i class="fas fa-info-circle text-gray-400 text-xs mr-1" title="عدد المخططات المختلفة"></i>
+                        </label>
+                        <input type="number" id="variantCount" value="3" min="1" max="10"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    </div>
+
+                    <!-- Corridor Width -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            عرض الممر (متر)
+                        </label>
+                        <input type="number" id="corridorWidth" value="2.2" min="2.0" max="2.5" step="0.1"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <!-- Step 3: Unit Distribution -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-lg font-bold mb-4 flex items-center">
+                        <span class="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center ml-2 text-sm">3</span>
+                        توزيع الوحدات
+                    </h2>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-sm font-medium text-gray-700">Studio</label>
+                            <input type="number" id="studioPercent" value="20" min="0" max="100"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-gray-700">1 غرفة نوم (1BR)</label>
+                            <input type="number" id="oneBrPercent" value="40" min="0" max="100"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-gray-700">2 غرفة نوم (2BR)</label>
+                            <input type="number" id="twoBrPercent" value="30" min="0" max="100"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-gray-700">3 غرف نوم (3BR)</label>
+                            <input type="number" id="threeBrPercent" value="10" min="0" max="100"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+
+                    <div class="mt-4 p-3 bg-gray-50 rounded-lg">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-600">المجموع:</span>
+                            <span id="totalPercent" class="font-bold">100%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Generate Button -->
+                <button onclick="generateFloorPlan()" id="generateBtn"
+                        class="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-bold text-lg hover:from-blue-700 hover:to-purple-700 transition shadow-lg">
+                    <i class="fas fa-magic ml-2"></i>
+                    توليد المخطط
+                </button>
+            </div>
+
+            <!-- Left Panel: Results -->
+            <div class="lg:col-span-2">
+                
+                <!-- Status -->
+                <div id="statusPanel" class="hidden bg-white rounded-lg shadow p-6 mb-6">
+                    <div class="flex items-center">
+                        <div id="spinner" class="hidden ml-3">
+                            <i class="fas fa-spinner fa-spin text-2xl text-blue-600"></i>
+                        </div>
+                        <div id="successIcon" class="hidden ml-3">
+                            <i class="fas fa-check-circle text-2xl text-green-600"></i>
+                        </div>
+                        <div id="errorIcon" class="hidden ml-3">
+                            <i class="fas fa-exclamation-circle text-2xl text-red-600"></i>
+                        </div>
+                        <div>
+                            <h3 id="statusTitle" class="font-bold text-lg"></h3>
+                            <p id="statusMessage" class="text-sm text-gray-600"></p>
+                        </div>
+                    </div>
+                    <div id="progressBar" class="hidden mt-4 w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-blue-600 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Results -->
+                <div id="resultsPanel" class="hidden">
+                    <h2 class="text-2xl font-bold mb-4">النتائج</h2>
+                    <div id="variantsContainer" class="space-y-6">
+                        <!-- Variants will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div id="emptyState" class="bg-white rounded-lg shadow p-12 text-center">
+                    <i class="fas fa-drafting-compass text-6xl text-gray-300 mb-4"></i>
+                    <h3 class="text-xl font-bold text-gray-700 mb-2">ابدأ بتوليد مخطط جديد</h3>
+                    <p class="text-gray-500">ارفع ملف DXF واضبط الإعدادات ثم اضغط "توليد المخطط"</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Base URL (change this to your backend URL)
+        const API_BASE_URL = 'http://localhost:8001';  // TODO: Update with production URL
+
+        // File upload handling
+        const dropZone = document.getElementById('dropZone');
+        const dxfFile = document.getElementById('dxfFile');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+
+        let uploadedFile = null;
+
+        dxfFile.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                uploadedFile = e.target.files[0];
+                fileName.textContent = uploadedFile.name;
+                fileInfo.classList.remove('hidden');
+            }
+        });
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-blue-500', 'bg-blue-50');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+            
+            if (e.dataTransfer.files.length > 0) {
+                uploadedFile = e.dataTransfer.files[0];
+                fileName.textContent = uploadedFile.name;
+                fileInfo.classList.remove('hidden');
+            }
+        });
+
+        function clearFile() {
+            uploadedFile = null;
+            dxfFile.value = '';
+            fileInfo.classList.add('hidden');
+        }
+
+        // Update total percentage
+        ['studioPercent', 'oneBrPercent', 'twoBrPercent', 'threeBrPercent'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateTotalPercent);
+        });
+
+        function updateTotalPercent() {
+            const total = ['studioPercent', 'oneBrPercent', 'twoBrPercent', 'threeBrPercent']
+                .reduce((sum, id) => sum + parseInt(document.getElementById(id).value || 0), 0);
+            
+            const totalEl = document.getElementById('totalPercent');
+            totalEl.textContent = total + '%';
+            totalEl.classList.toggle('text-red-600', total !== 100);
+            totalEl.classList.toggle('text-green-600', total === 100);
+        }
+
+        // Generate floor plan
+        async function generateFloorPlan() {
+            // Validate inputs
+            const dxfUrl = document.getElementById('dxfUrl').value;
+            if (!uploadedFile && !dxfUrl) {
+                alert('الرجاء رفع ملف DXF أو إدخال رابط!');
+                return;
+            }
+
+            const total = ['studioPercent', 'oneBrPercent', 'twoBrPercent', 'threeBrPercent']
+                .reduce((sum, id) => sum + parseInt(document.getElementById(id).value || 0), 0);
+            
+            if (total !== 100) {
+                alert('يجب أن يكون مجموع نسب الوحدات 100%!');
+                return;
+            }
+
+            // Show status
+            showStatus('processing', 'جاري التوليد...', 'يرجى الانتظار، قد يستغرق هذا 10-30 ثانية');
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('resultsPanel').classList.add('hidden');
+
+            // Build request
+            const requestData = {
+                project_id: 'web-' + Date.now(),
+                dxf_url: dxfUrl || null,
+                boundary_layer: 'BOUNDARY',
+                variant_count: parseInt(document.getElementById('variantCount').value),
+                constraints: {
+                    architectural_constraints: {
+                        core: {
+                            core_count: parseInt(document.getElementById('coreCount').value),
+                            elevators: 2,
+                            stairs: 2,
+                            net_area_m2: { min: 30, target: 40, max: 50 }
+                        },
+                        circulation: {
+                            corridor_pattern: document.getElementById('corridorPattern').value,
+                            corridor_width_m: {
+                                min: 2.0,
+                                target: parseFloat(document.getElementById('corridorWidth').value),
+                                max: 2.5
+                            },
+                            corridor_area_ratio: { min: 0.08, target: 0.10, max: 0.15 }
+                        },
+                        units: [
+                            {
+                                type: 'Studio',
+                                percentage: parseInt(document.getElementById('studioPercent').value),
+                                net_area_m2: { min: 25, target: 30, max: 35 }
+                            },
+                            {
+                                type: '1BR',
+                                percentage: parseInt(document.getElementById('oneBrPercent').value),
+                                net_area_m2: { min: 45, target: 55, max: 65 }
+                            },
+                            {
+                                type: '2BR',
+                                percentage: parseInt(document.getElementById('twoBrPercent').value),
+                                net_area_m2: { min: 65, target: 75, max: 85 }
+                            },
+                            {
+                                type: '3BR',
+                                percentage: parseInt(document.getElementById('threeBrPercent').value),
+                                net_area_m2: { min: 85, target: 100, max: 115 }
+                            }
+                        ]
+                    }
+                }
+            };
+
+            try {
+                // If file upload, we need to upload first
+                // For now, simulate with timeout
+                
+                // Simulate API call
+                showStatus('error', 'Backend غير متصل', 
+                    `Backend API غير متاح حالياً. الرجاء تشغيل الخادم على ${API_BASE_URL}`);
+                
+                // TODO: Uncomment when backend is ready
+                /*
+                const response = await axios.post(`${API_BASE_URL}/generate`, requestData);
+                
+                if (response.data.status === 'completed') {
+                    showStatus('success', 'تم التوليد بنجاح!', `تم إنشاء ${response.data.variants.length} بديل`);
+                    displayResults(response.data.variants);
+                } else {
+                    showStatus('error', 'فشل التوليد', response.data.message);
+                }
+                */
+                
+                // Demo: Show sample results after 3 seconds
+                setTimeout(() => {
+                    showStatus('success', 'تم التوليد بنجاح!', 'تم إنشاء 3 بدائل (Demo)');
+                    displayDemoResults();
+                }, 3000);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus('error', 'حدث خطأ', error.message);
+            }
+        }
+
+        function showStatus(type, title, message) {
+            const statusPanel = document.getElementById('statusPanel');
+            const statusTitle = document.getElementById('statusTitle');
+            const statusMessage = document.getElementById('statusMessage');
+            const spinner = document.getElementById('spinner');
+            const successIcon = document.getElementById('successIcon');
+            const errorIcon = document.getElementById('errorIcon');
+
+            statusPanel.classList.remove('hidden');
+            statusTitle.textContent = title;
+            statusMessage.textContent = message;
+
+            spinner.classList.toggle('hidden', type !== 'processing');
+            successIcon.classList.toggle('hidden', type !== 'success');
+            errorIcon.classList.toggle('hidden', type !== 'error');
+        }
+
+        function displayDemoResults() {
+            const resultsPanel = document.getElementById('resultsPanel');
+            const variantsContainer = document.getElementById('variantsContainer');
+            
+            resultsPanel.classList.remove('hidden');
+            
+            const demoVariants = [
+                {
+                    variant_number: 1,
+                    metrics: {
+                        total_area: 3024.0,
+                        core_area: 40.0,
+                        corridor_area: 286.3,
+                        units_area: 1684.1,
+                        efficiency: 0.665,
+                        corridor_ratio: 0.095,
+                        units_count: 38
+                    },
+                    units_by_type: { Studio: 8, '1BR': 15, '2BR': 11, '3BR': 4 }
+                },
+                {
+                    variant_number: 2,
+                    metrics: {
+                        total_area: 3024.0,
+                        core_area: 40.0,
+                        corridor_area: 295.8,
+                        units_area: 1720.5,
+                        efficiency: 0.681,
+                        corridor_ratio: 0.098,
+                        units_count: 40
+                    },
+                    units_by_type: { Studio: 9, '1BR': 16, '2BR': 11, '3BR': 4 }
+                },
+                {
+                    variant_number: 3,
+                    metrics: {
+                        total_area: 3024.0,
+                        core_area: 40.0,
+                        corridor_area: 280.2,
+                        units_area: 1650.3,
+                        efficiency: 0.652,
+                        corridor_ratio: 0.093,
+                        units_count: 36
+                    },
+                    units_by_type: { Studio: 7, '1BR': 14, '2BR': 11, '3BR': 4 }
+                }
+            ];
+            
+            variantsContainer.innerHTML = demoVariants.map(v => `
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-xl font-bold">البديل ${v.variant_number}</h3>
+                        <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                            ${v.metrics.units_count} وحدة
+                        </span>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                        <div class="text-center p-3 bg-blue-50 rounded-lg">
+                            <div class="text-2xl font-bold text-blue-600">${(v.metrics.efficiency * 100).toFixed(1)}%</div>
+                            <div class="text-xs text-gray-600">الكفاءة</div>
+                        </div>
+                        <div class="text-center p-3 bg-green-50 rounded-lg">
+                            <div class="text-2xl font-bold text-green-600">${v.metrics.units_area.toFixed(0)} m²</div>
+                            <div class="text-xs text-gray-600">مساحة الوحدات</div>
+                        </div>
+                        <div class="text-center p-3 bg-purple-50 rounded-lg">
+                            <div class="text-2xl font-bold text-purple-600">${(v.metrics.corridor_ratio * 100).toFixed(1)}%</div>
+                            <div class="text-xs text-gray-600">نسبة الممرات</div>
+                        </div>
+                        <div class="text-center p-3 bg-orange-50 rounded-lg">
+                            <div class="text-2xl font-bold text-orange-600">${v.metrics.units_count}</div>
+                            <div class="text-xs text-gray-600">عدد الوحدات</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-sm mb-2">توزيع الوحدات:</h4>
+                        <div class="flex flex-wrap gap-2">
+                            ${Object.entries(v.units_by_type).map(([type, count]) => `
+                                <span class="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                                    ${type}: ${count}
+                                </span>
+                            `).join('')}
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-2">
+                        <button class="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition" disabled>
+                            <i class="fas fa-download ml-2"></i>
+                            تحميل DXF
+                        </button>
+                        <button class="flex-1 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition" disabled>
+                            <i class="fas fa-eye ml-2"></i>
+                            معاينة SVG
+                        </button>
+                    </div>
+                    
+                    <div class="mt-3 p-3 bg-yellow-50 rounded-lg text-sm text-yellow-800">
+                        <i class="fas fa-info-circle ml-1"></i>
+                        هذه نتائج تجريبية. لتحميل الملفات الفعلية، يجب تشغيل Backend API.
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Initialize
+        updateTotalPercent();
+    </script>
+</body>
+</html>
